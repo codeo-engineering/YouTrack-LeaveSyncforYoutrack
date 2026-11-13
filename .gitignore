@@ -1,4 +1,5 @@
 *.zip
 *.png
+!docs/images/*.png
 node_modules/
 .DS_Store
