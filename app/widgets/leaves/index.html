@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Leaves</title>
+  <link rel="stylesheet" href="../common.css">
+</head>
+<body>
+<div id="app"><div class="loading">Loading your leave…</div></div>
+<script src="../common.js"></script>
+<script type="module">
+const { h, clear } = LT;
+const app = document.getElementById('app');
+const state = { data: null, view: null, lastCustom: null, target: null, isAdmin: false, overview: null, teamView: null };
+const TEAM = '__team';
+
+await LT.connect();
+await LT.initTheme();
+
+async function load() {
+  if (state.target === TEAM) {
+    state.overview = await LT.get('admin-overview');
+  } else {
+    state.data = await LT.get('me', state.target ? { login: state.target } : null);
+    if (!state.target) state.isAdmin = !!state.data.isAdmin;
+    if (state.isAdmin && !state.overview) {
+      try { state.overview = await LT.get('admin-overview'); } catch (e) { /* picker just shows "My leave" */ }
+    }
+  }
+  render();
+}
+
+async function switchTarget(value) {
+  state.target = value || null;
+  state.view = null;
+  clear(app).appendChild(h('div', { class: 'loading' }, 'Loading…'));
+  try { await load(); } catch (e) { clear(app).appendChild(h('div', { class: 'notice bad' }, e.message)); }
+}
+
+/** Admin-only picker: My leave / Team overview / any employee. */
+function adminPicker() {
+  if (!state.isAdmin) return null;
+  const emps = (state.overview && state.overview.employees) || [];
+  const sel = h('select', { 'aria-label': 'Whose leave to show', style: { minWidth: '240px' } },
+    h('option', { value: '' }, 'My leave'),
+    h('option', { value: TEAM }, 'Team overview (all employees)'),
+    emps.length ? h('optgroup', { label: 'Employees' }, emps.map(e => h('option', { value: e.login }, e.name))) : null);
+  sel.value = state.target || '';
+  sel.addEventListener('change', () => switchTarget(sel.value));
+  return h('div', { class: 'row', style: { marginBottom: '16px' } },
+    h('span', { class: 'badge accent' }, 'Admin'), h('span', { class: 'muted' }, 'View'), sel,
+    h('span', { class: 'small muted' }, 'Manage settings in Administration → Integrations → Leave Management'));
+}
+
+function render() {
+  clear(app);
+  if (state.target === TEAM) return renderTeam();
+  const d = state.data;
+  const other = d.viewingOther;
+  const head = h('div', { class: 'page-head' },
+    h('div', null,
+      h('h1', null, other ? 'Leave · ' + d.user.name : 'My leave'),
+      h('div', { class: 'sub' }, other ? (d.user.email || d.user.login) : d.user.name, d.balance && d.balance.configured ? ' · joined ' + LT.date(d.balance.hireDate) : '')
+    ),
+    h('div', { class: 'spacer' }),
+    h('div', { class: 'small muted' }, 'Teams data synced ' + LT.ago(d.sync.lastSyncAt)),
+    LT.themeToggle()
+  );
+  app.appendChild(head);
+  const picker = adminPicker();
+  if (picker) app.appendChild(picker);
+
+  if (!d.configured || !d.balance || !d.balance.configured) {
+    app.appendChild(h('div', { class: 'card empty' },
+      h('div', { class: 'big' }, other ? d.user.name + ' is not set up yet' : 'Your leave profile is not set up yet'),
+      h('div', null, other ? 'Add their hire date in Leave Management → Employees.'
+        : 'Your manager adds your hire date and leave entitlement. Once that is done, your balance appears here automatically.')
+    ));
+    return;
+  }
+
+  const b = d.balance;
+  const periods = b.periods;
+  const cur = b.current || periods[periods.length - 1];
+  if (!cur) {
+    app.appendChild(h('div', { class: 'card empty' }, h('div', { class: 'big' }, 'Your first leave year starts on ' + LT.date(b.hireDate))));
+    return;
+  }
+  if (!state.view) state.view = { kind: 'period', index: cur.index };
+  const v = state.view;
+  const p = v.kind === 'period' ? (periods.find(x => x.index === v.index) || cur) : null;
+  const range = p ? { from: p.start, to: p.end }
+    : v.kind === 'year' ? { from: v.year + '-01-01', to: v.year + '-12-31' }
+    : { from: v.from, to: v.to };
+
+  // ---- "Show" selector: leave years, calendar years, custom range ----
+  const thisYear = +b.today.slice(0, 4);
+  const years = new Set([thisYear]);
+  (b.dayLog || []).forEach(x => years.add(+x.date.slice(0, 4)));
+  for (let y = Math.max(+b.hireDate.slice(0, 4), +b.trackingStart.slice(0, 4)); y <= thisYear; y++) years.add(y);
+  const selValue = v.kind === 'period' ? 'p:' + p.index : v.kind === 'year' ? 'y:' + v.year : 'c';
+  const sel = h('select', { 'aria-label': 'Period to show' },
+    h('optgroup', { label: 'Leave years (work anniversary)' }, periods.slice().reverse().map(x =>
+      h('option', { value: 'p:' + x.index }, LT.range(x.start, x.end) + (x.isCurrent ? '  (current)' : x.isFuture ? '  (upcoming)' : '')))),
+    h('optgroup', { label: 'Calendar years' }, Array.from(years).sort((a, c) => c - a).map(y =>
+      h('option', { value: 'y:' + y }, 'Calendar year ' + y))),
+    h('optgroup', { label: 'Other' }, h('option', { value: 'c' }, 'Custom date range…'))
+  );
+  sel.value = selValue;
+  sel.addEventListener('change', () => {
+    const [kind, val] = sel.value.split(':');
+    if (kind === 'p') state.view = { kind: 'period', index: +val };
+    else if (kind === 'y') state.view = { kind: 'year', year: +val };
+    else state.view = { kind: 'custom', from: state.lastCustom ? state.lastCustom.from : thisYear + '-01-01', to: state.lastCustom ? state.lastCustom.to : b.today };
+    render();
+  });
+  const controls = [h('span', { class: 'muted' }, 'Show'), sel];
+  if (v.kind === 'custom') {
+    const from = h('input', { type: 'date', value: v.from, 'aria-label': 'From' });
+    const to = h('input', { type: 'date', value: v.to, 'aria-label': 'To' });
+    const apply = () => {
+      if (!from.value || !to.value) return;
+      const a = from.value <= to.value ? from.value : to.value, c = from.value <= to.value ? to.value : from.value;
+      state.view = { kind: 'custom', from: a, to: c };
+      state.lastCustom = { from: a, to: c };
+      render();
+    };
+    from.addEventListener('change', apply);
+    to.addEventListener('change', apply);
+    controls.push(h('span', { class: 'muted small' }, 'from'), from, h('span', { class: 'muted small' }, 'to'), to);
+  }
+  app.appendChild(h('div', { class: 'row', style: { marginBottom: '14px' } }, controls,
+    h('span', { class: 'spacer' }),
+    p ? h('span', { class: 'small muted' }, p.seniorityYears + (p.seniorityYears === 1 ? ' year' : ' years') + ' of service at the start of this leave year')
+      : h('span', { class: 'small muted' }, LT.range(range.from, range.to))
+  ));
+
+  // ---- totals for the range, from the per-day log ----
+  const inRange = (b.dayLog || []).filter(x => x.date >= range.from && x.date <= range.to);
+  const byType = {}, byRec = {};
+  let annualH = 0, otherH = 0;
+  inRange.forEach(x => {
+    byType[x.reasonId] = byType[x.reasonId] || { hours: 0, deducts: x.deducts };
+    byType[x.reasonId].hours += x.hours;
+    byRec[x.recId] = (byRec[x.recId] || 0) + x.hours;
+    if (x.deducts) annualH += x.hours; else otherH += x.hours;
+  });
+  const wh = b.workdayHours;
+  const usage = Object.keys(byType).map(id => ({
+    name: (b.reasonNames || {})[id] || 'Unknown reason', deducts: byType[id].deducts, hours: byType[id].hours, days: byType[id].hours / wh
+  })).sort((a, c) => c.hours - a.hours);
+  const includesUpcoming = inRange.some(x => x.date > b.today);
+
+  // ---- cards ----
+  if (p) {
+    const negative = p.remainingDays < 0;
+    app.appendChild(h('div', { class: 'cards' },
+      h('div', { class: 'card stat hero' + (negative ? ' negative' : '') },
+        h('div', { class: 'label' }, 'Remaining annual leave'),
+        h('div', { class: 'value' }, LT.days(p.remainingDays)),
+        h('div', { class: 'hint' }, LT.hours(p.remainingHours) + ' · ' + wh + ' h = 1 day')
+      ),
+      stat('Entitlement this year', LT.days(p.entitlement), p.entitlementOverridden ? 'Set by your manager' : p.entitlementRule),
+      stat('Carried over', LT.days(p.carryIn), p.index !== periods[0].index ? 'Unused from last year'
+        : (b.openingConfirmed ? 'Balance when tracking started' : (other ? 'Not confirmed yet – check it in Leave Management' : 'Your manager is still checking this number'))),
+      stat('Used (annual leave)', LT.days(p.usedDays), LT.hours(p.usedHours)),
+      p.adjustments ? stat('Adjustments', LT.signedDays(p.adjustments), other ? 'Manual adjustments' : 'Made by your manager') : null
+    ));
+    if (p.isCurrent && b.nextAnniversary) {
+      app.appendChild(h('p', { class: 'small muted', style: { marginTop: '10px' } },
+        (other ? 'Next work anniversary (' + LT.date(b.nextAnniversary.date) + '): +' : 'On your next work anniversary (' + LT.date(b.nextAnniversary.date) + ') you receive ') + LT.days(b.nextAnniversary.entitlement) +
+        '. Unused leave carries over. Weekends and public holidays are not deducted.'));
+    }
+  } else {
+    app.appendChild(h('div', { class: 'cards' },
+      h('div', { class: 'card stat hero' + (cur.remainingDays < 0 ? ' negative' : '') },
+        h('div', { class: 'label' }, 'Remaining annual leave (current leave year)'),
+        h('div', { class: 'value' }, LT.days(cur.remainingDays)),
+        h('div', { class: 'hint' }, LT.range(cur.start, cur.end))
+      ),
+      stat('Annual leave used in this range', LT.days(annualH / wh), LT.hours(annualH)),
+      stat('Other leave in this range', LT.days(otherH / wh), 'Not deducted from annual leave'),
+      stat('Total', LT.days((annualH + otherH) / wh), LT.range(range.from, range.to))
+    ));
+    app.appendChild(h('p', { class: 'small muted', style: { marginTop: '10px' } },
+      'Your balance is calculated per leave year (work anniversary to work anniversary). This view only totals the leave inside the chosen dates' +
+      (includesUpcoming ? ', including approved upcoming leave.' : '.')));
+  }
+
+  // ---- usage by type ----
+  const usageCard = h('div', { class: 'card' },
+    h('h2', null, 'Usage by type'),
+    usage.length
+      ? h('table', null,
+          h('thead', null, h('tr', null, h('th', null, 'Type'), h('th', null, 'Counts against annual leave'), h('th', { class: 'num' }, 'Days'), h('th', { class: 'num' }, 'Hours'))),
+          h('tbody', null, usage.map(u => h('tr', null,
+            h('td', null, u.name),
+            h('td', null, u.deducts ? h('span', { class: 'badge accent' }, 'Yes') : h('span', { class: 'badge neutral' }, 'No')),
+            h('td', { class: 'num' }, LT.n(u.days)),
+            h('td', { class: 'num' }, LT.n(u.hours))
+          ))))
+      : h('p', { class: 'muted' }, 'No leave in this period.'));
+
+  // ---- history ----
+  const inPeriod = b.records.filter(r => r.lastDay && r.lastDay >= range.from && r.firstDay <= range.to);
+  const historyCard = h('div', { class: 'card' },
+    h('h2', null, 'Leave history'),
+    inPeriod.length
+      ? h('table', null,
+          h('thead', null, h('tr', null, h('th', null, 'Dates'), h('th', null, 'Type'), h('th', { class: 'num' }, 'Charged'), h('th', null, ''))),
+          h('tbody', null, inPeriod.map(r => {
+            const hrs = byRec[r.id] || 0;
+            return h('tr', null,
+              h('td', null, LT.range(r.firstDay, r.lastDay), isPartial(r) ? h('span', { class: 'small muted' }, '  ' + r.startTime + '–' + r.endTime) : null,
+                r.firstDay > b.today ? h('span', { class: 'badge neutral', style: { marginLeft: '6px' } }, 'upcoming') : null),
+              h('td', null, r.reasonName),
+              h('td', { class: 'num' }, hrs < wh ? LT.hours(hrs) : LT.days(hrs / wh)),
+              h('td', null, h('div', { class: 'row', style: { gap: '4px' } },
+                r.beforeTracking && !hrs ? h('span', { class: 'badge neutral' }, 'Before tracking')
+                  : r.deducts ? h('span', { class: 'badge accent' }, 'Annual leave') : h('span', { class: 'badge neutral' }, 'Not deducted'),
+                r.override ? h('span', { class: 'badge good', title: r.override.note || '' }, r.override.mode === 'exclude' ? 'Not counted · corrected' : 'Corrected') : null,
+                r.unshared && !r.override ? h('span', { class: 'badge good', title: 'Your manager changed this leave in the Shifts schedule.' }, 'Updated by manager') : null),
+                r.override && r.override.note ? h('div', { class: 'small muted' }, r.override.note) : null));
+          })))
+      : h('p', { class: 'muted' }, 'No leave in this period.')
+  );
+
+  const adjList = p ? (p.adjustmentList || []) : [];
+  const adjCard = adjList.length ? h('div', { class: 'card' },
+    h('h2', null, 'Adjustments'),
+    h('table', null, h('tbody', null, adjList.map(a => h('tr', null,
+      h('td', null, LT.date(a.date)), h('td', { class: 'num' }, LT.signedDays(a.days)), h('td', null, a.note)))))
+  ) : null;
+
+  app.appendChild(h('div', { class: 'stack', style: { marginTop: '20px' } }, usageCard, historyCard, adjCard));
+}
+
+// ---------------- team overview (admins) ----------------
+function renderTeam() {
+  const o = state.overview;
+  app.appendChild(h('div', { class: 'page-head' },
+    h('div', null, h('h1', null, 'Team leave overview'), h('div', { class: 'sub' }, o.employees.length + ' employees')),
+    h('div', { class: 'spacer' }), LT.themeToggle()));
+  app.appendChild(adminPicker());
+
+  const wh = o.workdayHours;
+  const thisYear = +o.today.slice(0, 4);
+  const years = new Set([thisYear]);
+  o.employees.forEach(e => (e.dayLog || []).forEach(x => years.add(+x.date.slice(0, 4))));
+  if (!state.teamView) state.teamView = { kind: 'current' };
+  const v = state.teamView;
+  const sel = h('select', { 'aria-label': 'Period' },
+    h('option', { value: 'cur' }, 'Current leave year (each person\'s own)'),
+    h('optgroup', { label: 'Calendar years' }, Array.from(years).sort((a, c) => c - a).map(y => h('option', { value: 'y:' + y }, 'Calendar year ' + y))),
+    h('optgroup', { label: 'Other' }, h('option', { value: 'c' }, 'Custom date range…')));
+  sel.value = v.kind === 'current' ? 'cur' : v.kind === 'year' ? 'y:' + v.year : 'c';
+  sel.addEventListener('change', () => {
+    const [k, val] = sel.value.split(':');
+    state.teamView = k === 'cur' ? { kind: 'current' } : k === 'y' ? { kind: 'year', year: +val }
+      : { kind: 'custom', from: state.lastCustom ? state.lastCustom.from : thisYear + '-01-01', to: state.lastCustom ? state.lastCustom.to : o.today };
+    render();
+  });
+  const controls = [h('span', { class: 'muted' }, 'Show'), sel];
+  if (v.kind === 'custom') {
+    const from = h('input', { type: 'date', value: v.from, 'aria-label': 'From' });
+    const to = h('input', { type: 'date', value: v.to, 'aria-label': 'To' });
+    const apply = () => {
+      if (!from.value || !to.value) return;
+      const a = from.value <= to.value ? from.value : to.value, c = from.value <= to.value ? to.value : from.value;
+      state.teamView = { kind: 'custom', from: a, to: c }; state.lastCustom = { from: a, to: c }; render();
+    };
+    from.addEventListener('change', apply); to.addEventListener('change', apply);
+    controls.push(h('span', { class: 'muted small' }, 'from'), from, h('span', { class: 'muted small' }, 'to'), to);
+  }
+  app.appendChild(h('div', { class: 'row', style: { marginBottom: '14px' } }, controls));
+
+  // per-employee totals in the range
+  const typeIds = new Set();
+  const rows = o.employees.map(e => {
+    const range = v.kind === 'current' ? (e.current ? { from: e.current.start, to: e.current.end } : null)
+      : v.kind === 'year' ? { from: v.year + '-01-01', to: v.year + '-12-31' } : { from: v.from, to: v.to };
+    const byType = {}; let annual = 0, otherH = 0;
+    if (range) (e.dayLog || []).forEach(x => {
+      if (x.date < range.from || x.date > range.to) return;
+      byType[x.reasonId] = (byType[x.reasonId] || 0) + x.hours; typeIds.add(x.reasonId);
+      if (x.deducts) annual += x.hours; else otherH += x.hours;
+    });
+    return { e, range, byType, annual, otherH };
+  });
+  const types = Array.from(typeIds).sort((a, c) => ((o.reasons[a] || {}).name || '').localeCompare((o.reasons[c] || {}).name || ''));
+  const tName = id => (o.reasons[id] || {}).name || 'Unknown';
+  const dcell = hrs => h('td', { class: 'num' }, hrs ? LT.n(hrs / wh) : h('span', { class: 'muted' }, '–'));
+  const tot = { annual: 0, other: 0, types: {} };
+  rows.forEach(r => { tot.annual += r.annual; tot.other += r.otherH; types.forEach(t => { tot.types[t] = (tot.types[t] || 0) + (r.byType[t] || 0); }); });
+
+  app.appendChild(h('div', { class: 'card', style: { overflowX: 'auto' } },
+    h('table', null,
+      h('thead', null, h('tr', null,
+        h('th', null, 'Employee'),
+        v.kind === 'current' ? h('th', null, 'Leave year') : null,
+        h('th', { class: 'num', title: 'Remaining in the current leave year' }, 'Remaining now'),
+        h('th', { class: 'num' }, 'Annual leave used'),
+        h('th', { class: 'num' }, 'Other leave'),
+        types.map(t => h('th', { class: 'num', title: (o.reasons[t] || {}).deducts ? 'Deducted from annual leave' : 'Not deducted' }, tName(t))))),
+      h('tbody', null, rows.map(r => h('tr', { class: 'clickable', title: 'Open ' + r.e.name, onclick: () => switchTarget(r.e.login) },
+        h('td', null, r.e.name),
+        v.kind === 'current' ? h('td', { class: 'small muted' }, r.e.current ? LT.range(r.e.current.start, r.e.current.end) : 'not set up') : null,
+        h('td', { class: 'num', style: { fontWeight: 600, color: r.e.current && r.e.current.remainingDays < 0 ? 'var(--bad)' : '' } },
+          r.e.current ? LT.n(r.e.current.remainingDays) : '–'),
+        dcell(r.annual), dcell(r.otherH),
+        types.map(t => dcell(r.byType[t] || 0))
+      )),
+        h('tr', null,
+          h('td', null, h('b', null, 'Total')),
+          v.kind === 'current' ? h('td', null) : null,
+          h('td', null),
+          h('td', { class: 'num' }, h('b', null, LT.n(tot.annual / wh))),
+          h('td', { class: 'num' }, h('b', null, LT.n(tot.other / wh))),
+          types.map(t => h('td', { class: 'num' }, h('b', null, LT.n(tot.types[t] / wh))))))
+    ),
+    h('p', { class: 'small muted', style: { marginTop: '10px' } },
+      'All figures in days (' + wh + ' h = 1 day). Weekends and public holidays are not counted; approved upcoming leave inside the period is included. Click a row to open that person\'s page.')
+  ));
+}
+
+function stat(label, value, hint) {
+  return h('div', { class: 'card stat' }, h('div', { class: 'label' }, label), h('div', { class: 'value' }, value), hint ? h('div', { class: 'hint' }, hint) : null);
+}
+function isPartial(r) {
+  return r.firstDay === r.lastDay && r.startTime !== '00:00';
+}
+
+try {
+  await load();
+} catch (e) {
+  clear(app).appendChild(h('div', { class: 'notice bad' }, 'Could not load your leave: ' + e.message));
+}
+
+// Refresh Teams data in the background when it is stale, then re-render.
+try {
+  const s = await LT.post('sync', {});
+  if (s && s.ran && !s.error && s.ok !== false) await load();
+} catch (e) { /* the page still shows the last synced data */ }
+</script>
+</body>
+</html>

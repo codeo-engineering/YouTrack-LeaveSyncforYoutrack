@@ -1,0 +1,19 @@
+{
+  "entityTypeExtensions": [
+    {
+      "entityType": "User",
+      "properties": {
+        "leaveEnabled": { "type": "boolean" },
+        "leaveProfile": { "type": "string" },
+        "leaveRecords": { "type": "string" }
+      }
+    },
+    {
+      "entityType": "AppGlobalStorage",
+      "properties": {
+        "leaveConfig": { "type": "string" },
+        "leaveAudit": { "type": "string" }
+      }
+    }
+  ]
+}

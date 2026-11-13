@@ -1,0 +1,253 @@
+<h2>Getting Started</h2>
+
+<p>Leave Sync for YouTrack reads approved time off from <b>Microsoft Teams Shifts</b> through Microsoft Graph. Setup takes about 15 minutes. You connect a Microsoft Entra app registration once, then add your employees.</p>
+
+<h3>What you need</h3>
+<ul>
+  <li>A YouTrack administrator account (permission to install apps).</li>
+  <li>A Microsoft 365 administrator who can register an app and grant admin consent (<b>Global Administrator</b> or <b>Privileged Role Administrator</b>).</li>
+  <li>A team in Microsoft Teams that uses <b>Shifts</b> for time-off requests.</li>
+  <li>For each employee: hire date, optional birth date, and how many leave days they have left today.</li>
+</ul>
+
+<h3>Part 1 – Connect Microsoft Teams</h3>
+
+<p><b>Step 1. Register an app in Microsoft Entra ID</b></p>
+<ol>
+  <li>Sign in to <a href="https://entra.microsoft.com">entra.microsoft.com</a>.</li>
+  <li>Go to <b>Identity → Applications → App registrations</b>.<br>
+    <i>Tip:</i> if you land on <b>Enterprise applications</b>, open <b>App registrations</b> instead. You can use the <i>application registrations</i> link in the page description.</li>
+  <li>Click <b>+ New registration</b> and fill in:
+    <ul>
+      <li><b>Name:</b> <code>Leave Sync for YouTrack</code> (any name works; it is only shown in Entra)</li>
+      <li><b>Supported account types:</b> <i>Accounts in this organizational directory only (Single tenant)</i></li>
+      <li><b>Redirect URI:</b> leave empty</li>
+    </ul>
+  </li>
+  <li>Click <b>Register</b>. The app's <b>Overview</b> page opens.</li>
+  <li>In <b>Essentials</b>, copy the <b>Application (client) ID</b> and the <b>Directory (tenant) ID</b>. You don't need the <i>Object ID</i>. These two IDs are not secret.</li>
+</ol>
+
+<p><b>Step 2. Grant Microsoft Graph permissions</b></p>
+<ol>
+  <li>In the app's left menu, under <b>Manage</b>, open <b>API permissions</b>.</li>
+  <li>Click <b>+ Add a permission → Microsoft Graph → Application permissions</b>.<br>
+    Choose <b>Application permissions</b>, not <i>Delegated permissions</i>. The app reads data in the background, without a signed-in user.</li>
+  <li>Search for and select both permissions:
+    <ul>
+      <li><code>Schedule.Read.All</code>: reads time off and time-off reasons from Shifts.</li>
+      <li><code>User.Read.All</code>: matches Teams users to YouTrack users by e-mail.</li>
+    </ul>
+  </li>
+  <li>Click <b>Add permissions</b>.</li>
+  <li>Click <b>Grant admin consent for &lt;your organization&gt;</b> and confirm with <b>Yes</b>. Both permissions must show a green check and <i>Granted for &lt;your organization&gt;</i>. You can keep the default <code>User.Read</code> (Delegated) permission.</li>
+</ol>
+
+<p><b>Step 3. Create a client secret</b></p>
+<ol>
+  <li>Under <b>Manage</b>, open <b>Certificates &amp; secrets</b>. You can also click <b>Add a certificate or secret</b> on the Overview page.</li>
+  <li>On the <b>Client secrets</b> tab, click <b>+ New client secret</b>. Enter <b>Description:</b> <code>YouTrack</code> and set <b>Expires:</b> 24 months.</li>
+  <li>Click <b>Add</b> and copy the <b>Value</b> right away.
+    <ul>
+      <li>Copy the <b>Value</b> column, not the <b>Secret ID</b> column.</li>
+      <li>The value is shown only once. Treat it like a password.</li>
+    </ul>
+  </li>
+  <li>Add the expiry date to your calendar. Before it expires, create a new secret and update the app settings in YouTrack.</li>
+</ol>
+
+<p><b>Step 4. Find your Team ID</b></p>
+<ol>
+  <li>In Microsoft Teams, open the team that uses Shifts. To check which team that is, open the <b>Shifts</b> app: it shows the team whose schedule you are viewing.</li>
+  <li>Open the team's <b>⋯</b> menu (next to the team name, or at the top right of the team page). Select <b>Copy link</b> (in older Teams: <b>Get link to team</b>) and click <b>Copy</b>.</li>
+  <li>Paste the link somewhere. The Team ID is the value after <code>groupId=</code>, up to the next <code>&amp;</code>. For example, in<br>
+    <code>…/conversations?groupId=1a2b3c4d-1111-2222-3333-444455556666&amp;tenantId=…</code><br>
+    the Team ID is <code>1a2b3c4d-1111-2222-3333-444455556666</code>.
+    <ul>
+      <li>Don't use the <code>19%3A…thread.tacv2</code> part of the link. It is a different identifier.</li>
+      <li>The <code>tenantId</code> in the link must match the Directory (tenant) ID from Step 1.</li>
+    </ul>
+  </li>
+  <li>Alternative: in <b>Entra → Groups → All groups</b>, open the team's group. Its <b>Object ID</b> is the Team ID.</li>
+  <li>If you use Shifts in more than one team, collect each Team ID.</li>
+</ol>
+
+<p><b>Step 5. Enter the connection in YouTrack</b></p>
+<ol>
+  <li>In YouTrack, go to <b>Administration → Apps</b> and select <b>Leave Sync for YouTrack</b>. Check that the <b>Active</b> toggle is on.</li>
+  <li>Open the <b>Settings</b> tab:
+    <ul>
+      <li><b>Visibility:</b> keep the app available to all users, so everyone sees the <b>Leaves</b> menu item.</li>
+      <li><b>Microsoft Entra tenant ID:</b> the Directory (tenant) ID from Step 1.</li>
+      <li><b>Application (client) ID:</b> from Step 1.</li>
+      <li><b>Client secret:</b> the secret Value from Step 3.</li>
+      <li><b>Teams team IDs:</b> from Step 4. Separate several IDs with commas.</li>
+      <li><b>Leave administrators group</b> (optional): members can manage employees and see everyone's leave. System administrators always can.</li>
+    </ul>
+  </li>
+  <li>⚠️ <b>Watch out for browser autofill.</b> Check every field before you save. Browsers often put your e-mail address into <i>tenant ID</i> and a saved password into <i>Client secret</i>. If that happened, clear both fields and paste the correct values. If the browser offers to save a password, choose <b>Never</b>.</li>
+  <li>Click <b>Save</b> and reload the page. You now have:
+    <ul>
+      <li><b>Leaves</b> in the main menu, for every user.</li>
+      <li><b>Leave Management</b> under <b>Administration → Integrations</b>, for administrators.</li>
+    </ul>
+  </li>
+</ol>
+
+<p><b>Step 6. Test the connection</b></p>
+<ol>
+  <li>Open <b>Administration → Integrations → Leave Management → Teams connection</b> and click <b>Sync now</b>.</li>
+  <li>When the connection works, you see <b>Last sync: just now · N leave items since &lt;date&gt;</b>. About the last 13 months of approved time off is read.
+    <ul>
+      <li><i>0 people updated</i> is normal at this point. Leave is only stored for employees you add in Part 2.</li>
+      <li>If a red <i>Last Teams sync failed</i> message is shown, see <b>Troubleshooting</b> below. After fixing the settings, click <b>Sync now</b> again.</li>
+    </ul>
+  </li>
+</ol>
+
+<h3>Part 2 – Configure leave</h3>
+<p>All of these steps are in <b>Administration → Integrations → Leave Management</b>.</p>
+<ol>
+  <li><b>Leave types:</b> the time-off reasons from Teams are listed here. Tick the ones that are <b>deducted from annual leave</b> (usually <i>Off</i> / vacation) and click <b>Save</b>. Unticked types are counted and shown, but not deducted. Check local law before ticking sick-leave types.</li>
+  <li><b>Holidays &amp; working time:</b>
+    <ul>
+      <li>Choose <b>Built-in public holidays</b>: <i>Türkiye</i>, <i>Germany (nationwide)</i> or <i>None</i>. Built-in holidays are added every year, and Easter-based dates are calculated automatically.</li>
+      <li>Add regional or movable holidays under <b>Other days off</b>. For example, add your federal state's holidays in Germany, or the religious holidays in Türkiye.</li>
+      <li>Set the <b>UTC offset</b> and <b>Daylight saving time</b>. Germany: 1 and <i>EU summer time</i>. Türkiye: 3 and <i>None</i>.</li>
+      <li>Check the working hours per day (default 8) and the non-working days (default Sat/Sun).</li>
+    </ul>
+    Weekends and holidays are never deducted, and half-day holidays count as half a day.</li>
+  <li><b>Entitlement rules:</b> check the annual leave by years of service (default 1–5 years: 14, 6–14 years: 21, 15+ years: 26 days) and the optional age rule.</li>
+  <li><b>Employees → + Add employee:</b> pick the person, enter the hire date and click <b>Add</b>. Their leave is loaded from Teams right away. Then, in the right panel:
+    <ul>
+      <li>Under <b>Remaining today</b>, enter how many days the person has left today and click <b>Calculate</b>. This is the easiest way. Future approved leave is deducted when it happens.</li>
+      <li><b>Count Teams leave from</b> is set automatically. For people hired within roughly the last 13 months it is the hire date, so leave taken in the first year is deducted from their first entitlement.</li>
+      <li>Leave the <b>Entitlement</b> field in <i>Leave years</i> empty to use the automatic value. Type a number only to override one year.</li>
+      <li>Tick <b>Checked and confirmed</b> and click <b>Save profile</b>.</li>
+    </ul>
+  </li>
+  <li><b>Teams connection → People in Teams not matched to YouTrack:</b> people are matched by e-mail. Link anyone listed here to the right YouTrack user, then click <b>Sync now</b>. An entry shown as <i>Unknown</i> is usually a deleted or guest account.</li>
+</ol>
+
+<h3>Part 3 – Check</h3>
+<ul>
+  <li>Open <b>Leaves → View → Team overview</b> and compare a few balances with your own records.</li>
+  <li>Ask an employee to open <b>Leaves</b>. They should see only their own data, with no <b>View</b> picker.</li>
+</ul>
+
+<h3>Feature guide – what each part does</h3>
+
+<p><b>Leaves page (main menu, every user)</b></p>
+<ul>
+  <li><b>Show:</b> chooses the period you look at:
+    <ul>
+      <li><b>Leave years:</b> one work anniversary to the next. This is the balance view.</li>
+      <li><b>Calendar years:</b> for example <i>Calendar year 2026</i>.</li>
+      <li><b>Custom date range:</b> any <i>from</i> and <i>to</i> dates you pick.</li>
+    </ul>
+  </li>
+  <li><b>Remaining annual leave:</b> days and hours left in the current leave year. Red means the balance is negative (leave taken in advance).</li>
+  <li><b>Entitlement this year:</b> days granted on the last work anniversary, based on years of service.</li>
+  <li><b>Carried over:</b> unused leave from earlier leave years.</li>
+  <li><b>Used (annual leave):</b> leave of types that are deducted from annual leave.</li>
+  <li><b>Adjustments:</b> days a manager added or removed by hand, each with a reason.</li>
+  <li><b>Usage by type:</b> all leave in the period grouped by Teams reason. Each type shows whether it counts against annual leave.</li>
+  <li><b>Leave history:</b> every leave in the period with the time charged. Labels:
+    <ul>
+      <li><i>upcoming:</i> approved leave in the future.</li>
+      <li><i>Corrected:</i> a manager changed how much is counted. The note is shown.</li>
+      <li><i>Updated by manager:</i> changed in the Shifts schedule.</li>
+      <li><i>Before tracking:</i> older than the tracking start, already included in the carried-over balance.</li>
+    </ul>
+  </li>
+  <li>For calendar years and custom ranges, the cards show the leave inside the chosen dates: annual leave, other leave and the total. The remaining balance always refers to the current leave year.</li>
+</ul>
+
+<p><b>View picker (administrators only, on the Leaves page)</b></p>
+<ul>
+  <li><b>My leave:</b> your own page.</li>
+  <li><b>Team overview:</b> one row per employee.
+    <ul>
+      <li>Columns: remaining leave now, annual leave used, other leave, and one column per leave type, with team totals. Values are in days.</li>
+      <li>The period can be each person's current leave year, a calendar year or a custom range.</li>
+      <li>Click a row to open that person.</li>
+    </ul>
+  </li>
+  <li><b>An employee's name:</b> opens that person's Leaves page exactly as they see it. This view is read-only. Changes are made in Leave Management.</li>
+</ul>
+
+<p><b>Leave Management → Employees</b></p>
+<ul>
+  <li><b>Employee list:</b> hire date, years of service, this year's entitlement, used and remaining days. <i>Check balance</i> marks people whose starting balance hasn't been confirmed yet.</li>
+  <li><b>Profile:</b>
+    <ul>
+      <li><b>Hire date:</b> sets the leave year (anniversary to anniversary) and the years of service.</li>
+      <li><b>Birth date:</b> optional. Only used for the age rule.</li>
+    </ul>
+  </li>
+  <li><b>Count Teams leave from:</b> Teams leave before this date is ignored, because it is already included in the carried-in balance. People hired within roughly the last 13 months start at the hire date, so leave taken before their first entitlement is deducted from it.</li>
+  <li><b>Balance carried into &lt;date&gt;:</b> unused leave from before the tracking start. Use the automatic value or type your own, then tick <b>Checked and confirmed</b>.</li>
+  <li><b>Remaining today → Calculate:</b> the quickest way to set the balance. Enter what the person has left today and the carried-in balance is worked out for you.</li>
+  <li><b>Leave years:</b> one row per leave year showing carried in, entitlement, adjustments, used and remaining. Type a number in <b>Entitlement</b> to override one year; leave it empty for the automatic value.</li>
+  <li><b>Manual adjustments:</b> add or remove days or hours with a reason, for example leave taken outside Teams or extra days granted. The date decides which leave year it belongs to. The employee sees the reason.</li>
+  <li><b>Leave from Teams:</b> every leave imported for the person.
+    <ul>
+      <li>The period selector shows the last month and upcoming leave by default. You can switch to 3 months, upcoming only, leave year, calendar year, all, or a custom range.</li>
+      <li><b>Correct</b> changes how much of a single leave is counted, or excludes it. <b>Reset to Teams</b> removes the correction.</li>
+      <li>The <i>not shared in Teams</i> label means the leave was changed in the Shifts schedule but not shared with the team yet.</li>
+    </ul>
+  </li>
+  <li><b>Stop tracking:</b> removes the person from the list and from the Leaves page. Their data is kept, and adding them again brings it back.</li>
+</ul>
+
+<p><b>Leave Management → other tabs</b></p>
+<ul>
+  <li><b>Leave types:</b> the time-off reasons from Teams. Tick the ones deducted from annual leave. Unticked types are only counted. New reasons appear as <i>Needs review</i> and are not deducted until you review them.</li>
+  <li><b>Holidays &amp; working time:</b>
+    <ul>
+      <li>Hours per working day, used to turn hourly leave into days.</li>
+      <li>Non-working days.</li>
+      <li>Company time zone: UTC offset plus optional EU summer time, so all-day leave always falls on the right date.</li>
+      <li><b>Built-in public holidays:</b> Türkiye, Germany (nationwide) or None. Easter-based holidays are calculated for every year.</li>
+      <li><b>Other days off:</b> regional, religious or company holidays you add yourself. <i>Half day</i> counts as half a working day.</li>
+    </ul>
+  </li>
+  <li><b>Entitlement rules:</b> days of annual leave by years of service, plus an optional minimum for young and older employees (needs a birth date).</li>
+  <li><b>Teams connection:</b>
+    <ul>
+      <li><b>Sync now</b>, and the automatic refresh interval. Data is refreshed when someone opens Leaves and it is older than the interval.</li>
+      <li><b>Count changes made in the Shifts schedule right away:</b> on by default. When it is off, only what employees see in Teams counts.</li>
+      <li>Linking people whose e-mail differs between Teams and YouTrack.</li>
+    </ul>
+  </li>
+  <li><b>Change history:</b> who changed what and when, for profiles, balances, adjustments, corrections and settings.</li>
+</ul>
+
+<h3>When the leave in Teams is wrong</h3>
+<ul>
+  <li><b>Preferred:</b> fix the time off in the Shifts schedule, then click <b>Share with team</b>. Your change counts at the next sync even before you share it, and is marked <i>not shared in Teams</i> until you do.</li>
+  <li><b>Otherwise:</b> go to <b>Leave Management → Employees →</b> the person <b>→ Leave from Teams → Correct</b>. Charge a different number of days or hours, or don't count the leave at all. A note is required and the employee sees it. The correction stays in place after every sync until you click <b>Reset to Teams</b>.</li>
+</ul>
+
+<h3>Troubleshooting</h3>
+<ul>
+  <li><b><code>AADSTS900023</code> … tenant identifier '&lt;e-mail&gt;'</b>: the browser autofilled your e-mail into the tenant ID field. Enter the Directory (tenant) ID and re-enter the client secret (Step 5).</li>
+  <li><b><code>AADSTS7000215</code> / invalid client secret</b>: the Secret ID was copied instead of the Value, a password was autofilled, or the secret expired. Paste the Value again, or create a new secret.</li>
+  <li><b>HTTP 401 / 403 from Microsoft Graph</b>: admin consent is missing, or Delegated permissions were added instead of Application permissions (Step 2).</li>
+  <li><b>HTTP 404 for a team</b>: wrong Team ID (for example, the <code>19:…thread.tacv2</code> part was used), or the team has no Shifts schedule (Step 4).</li>
+  <li><b>The error is still shown after fixing the settings</b>: it is the result of the previous attempt. Click <b>Sync now</b> and reload.</li>
+  <li><b>"Your leave profile is not set up yet"</b>: the user hasn't been added on the Employees tab. This applies to admins too.</li>
+  <li><b>A person's leave is missing</b>: their e-mail differs between Teams and YouTrack. Link them on the Teams connection tab.</li>
+  <li><b>Leave marked "before tracking"</b>: it is before the <i>Count Teams leave from</i> date. Pick an earlier date, or include that leave in the balance.</li>
+  <li><b>Leave shows as "not deducted"</b>: the leave type isn't ticked on the Leave types tab.</li>
+</ul>
+
+<h3>Ongoing administration</h3>
+<ul>
+  <li><b>New employee:</b> Employees → Add employee.</li>
+  <li><b>Employee leaves the company:</b> select them → Stop tracking. Their data is kept.</li>
+  <li><b>Every year:</b> add next year's holidays that aren't built in, such as religious holidays in Türkiye or regional holidays in Germany.</li>
+  <li><b>New reason in Teams:</b> review it on the Leave types tab, where it is marked <i>Needs review</i>.</li>
+  <li><b>Before the client secret expires:</b> create a new one in Entra and update the app settings.</li>
+  <li><b>Updating the app:</b> install the new version over the existing one. Don't delete the app: deleting it removes all of its data.</li>
+</ul>

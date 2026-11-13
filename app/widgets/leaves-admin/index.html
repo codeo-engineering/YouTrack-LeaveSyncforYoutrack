@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Leave Management</title>
+  <link rel="stylesheet" href="../common.css">
+</head>
+<body>
+<div id="app"><div class="loading">Loading…</div></div>
+<script src="../common.js"></script>
+<script type="module">
+const { h, clear } = LT;
+const app = document.getElementById('app');
+const WEEKDAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [0, 'Sun']];
+const S = { tab: 'employees', data: null, users: null, selected: null, detail: null, modal: null };
+
+await LT.connect();
+await LT.initTheme();
+
+// ---------------- data ----------------
+async function loadState() { S.data = await LT.get('admin-state'); }
+async function loadDetail() {
+  S.detail = S.selected ? await LT.get('admin-employee', { login: S.selected }) : null;
+}
+async function loadUsers() {
+  if (S.users) return S.users;
+  const list = await LT.host.fetchYouTrack('users', { query: { fields: 'id,login,fullName,email,banned', $top: 5000 } });
+  S.users = (list || []).filter(u => !u.banned && u.login !== 'guest')
+    .map(u => ({ login: u.login, name: u.fullName || u.login, email: u.email || '' }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return S.users;
+}
+async function refresh(keepDetail) {
+  await loadState();
+  if (keepDetail) await loadDetail();
+  render();
+}
+async function act(fn, okMsg) {
+  try {
+    await fn();
+    if (okMsg) LT.toast(okMsg);
+  } catch (e) {
+    LT.toast(e.message, true);
+    throw e;
+  }
+}
+
+// ---------------- layout ----------------
+function render() {
+  const d = S.data;
+  clear(app);
+  const needReview = d.reasons.filter(r => !r.reviewed).length;
+  const unconfirmed = d.employees.filter(e => e.configured && !e.openingConfirmed).length;
+  app.appendChild(h('div', { class: 'page-head' },
+    h('div', null, h('h1', null, 'Leave Management'),
+      h('div', { class: 'sub' }, 'Employees see only their own balance on the Leaves page. Today: ' + LT.date(d.today))),
+    h('div', { class: 'spacer' }),
+    LT.themeToggle()
+  ));
+
+  if (!d.sync.configured) {
+    app.appendChild(h('div', { class: 'notice warn', style: { marginBottom: '16px' } },
+      'Teams is not connected yet. You can already add employees; leave will appear after you fill in the app settings (see the Teams connection tab).'));
+  } else if (d.sync.lastSyncError) {
+    app.appendChild(h('div', { class: 'notice bad', style: { marginBottom: '16px' } }, 'Last Teams sync failed: ' + d.sync.lastSyncError.message));
+  }
+
+  const tabs = [
+    ['employees', 'Employees', unconfirmed ? h('span', { class: 'badge warn count' }, unconfirmed) : null],
+    ['types', 'Leave types', needReview ? h('span', { class: 'badge warn count' }, needReview) : null],
+    ['calendar', 'Holidays & working time'],
+    ['rules', 'Entitlement rules'],
+    ['teams', 'Teams connection', d.unmatched.length ? h('span', { class: 'badge warn count' }, d.unmatched.length) : null],
+    ['history', 'Change history']
+  ];
+  app.appendChild(h('div', { class: 'tabs', role: 'tablist' }, tabs.map(([key, label, badge]) =>
+    h('button', { class: S.tab === key ? 'active' : '', role: 'tab', onclick: () => { S.tab = key; render(); } }, label, badge || null))));
+
+  const body = h('div');
+  app.appendChild(body);
+  ({ employees: renderEmployees, types: renderTypes, calendar: renderCalendar, rules: renderRules, teams: renderTeams, history: renderHistory })[S.tab](body);
+  if (S.modal) app.appendChild(S.modal);
+}
+
+// ---------------- employees ----------------
+function renderEmployees(root) {
+  const d = S.data;
+  const list = h('div', { class: 'card' },
+    h('div', { class: 'row', style: { marginBottom: '10px' } },
+      h('h2', { style: { margin: 0 } }, 'Employees'), h('span', { class: 'muted small' }, d.employees.length + ' tracked'),
+      h('span', { class: 'spacer' }),
+      h('button', { class: 'primary', onclick: openAddEmployee }, '+ Add employee')),
+    d.employees.length ? h('table', null,
+      h('thead', null, h('tr', null,
+        h('th', null, 'Name'), h('th', null, 'Hire date'), h('th', { class: 'num' }, 'Service'),
+        h('th', { class: 'num' }, 'Entitlement'), h('th', { class: 'num' }, 'Used'), h('th', { class: 'num' }, 'Remaining'), h('th', null, ''))),
+      h('tbody', null, d.employees.map(e => h('tr', {
+        class: 'clickable' + (S.selected === e.login ? ' selected' : ''),
+        onclick: async () => { S.selected = e.login; await loadDetail(); render(); }
+      },
+        h('td', null, e.name, e.banned ? h('span', { class: 'badge bad', style: { marginLeft: '6px' } }, 'banned') : null),
+        h('td', null, e.configured ? LT.date(e.hireDate) : '—'),
+        h('td', { class: 'num' }, e.configured ? e.seniorityYears + ' y' : '—'),
+        h('td', { class: 'num' }, e.configured ? LT.n(e.entitlement) : '—'),
+        h('td', { class: 'num' }, e.configured ? LT.n(e.usedDays) : '—'),
+        h('td', { class: 'num', style: { fontWeight: 600, color: e.remainingDays < 0 ? 'var(--bad)' : '' } }, e.configured ? LT.n(e.remainingDays) : '—'),
+        h('td', null, !e.configured ? h('span', { class: 'badge warn' }, 'No hire date')
+          : !e.openingConfirmed ? h('span', { class: 'badge warn', title: 'Check the carried-over balance' }, 'Check balance') : null)
+      ))))
+      : h('div', { class: 'empty' }, h('div', { class: 'big' }, 'No employees yet'), 'Add people and their hire date to start.')
+  );
+  const detail = S.detail ? renderDetail() : h('div', { class: 'card empty' }, 'Select an employee to see and edit their leave.');
+  root.appendChild(h('div', { class: 'split' }, list, detail));
+}
+
+function renderDetail() {
+  const { user, profile, balance: b } = S.detail;
+  const wrap = h('div', { class: 'stack' });
+
+  // header
+  wrap.appendChild(h('div', { class: 'row' },
+    h('div', null, h('h2', { style: { margin: 0, fontSize: '18px' } }, user.name), h('div', { class: 'small muted' }, user.login + (user.email ? ' · ' + user.email : ''))),
+    h('span', { class: 'spacer' }),
+    h('button', { class: 'danger', onclick: () => removeEmployee(user) }, 'Stop tracking')));
+
+  // profile form
+  const hire = h('input', { type: 'date', value: profile.hireDate || '' });
+  const birth = h('input', { type: 'date', value: profile.birthDate || '' });
+  const autoOpening = !(typeof profile.openingDays === 'number');
+  const openingAuto = h('input', { type: 'checkbox', checked: autoOpening });
+  const opening = h('input', { type: 'number', step: '0.5', value: autoOpening ? '' : profile.openingDays, placeholder: b.configured ? String(b.openingAuto) : '', disabled: autoOpening });
+  openingAuto.addEventListener('change', () => { opening.disabled = openingAuto.checked; if (!openingAuto.checked && opening.value === '') opening.value = b.openingAuto; });
+  const confirmed = h('input', { type: 'checkbox', checked: !!profile.openingConfirmed });
+
+  const starts = S.detail.periodStarts || [];
+  const track = h('select', null, starts.map((d, k) => h('option', { value: d, selected: b.configured && d === b.trackingStart ? 'selected' : null },
+    LT.date(d) + (k === 0 ? ' – hire date (first year)' : ' – start of leave year ' + (k + 1)) +
+    (d < S.detail.historyFrom ? '  · older than Teams history' : ''))));
+  const remainingToday = h('input', { type: 'number', step: '0.5', placeholder: 'e.g. 9.5' });
+  const fromHire = b.configured && b.trackingStart === profile.hireDate;
+
+  const profileCard = h('div', { class: 'card' },
+    h('h3', null, 'Profile'),
+    h('div', { class: 'form-grid' },
+      h('label', { class: 'field' }, 'Hire date', hire),
+      h('label', { class: 'field' }, 'Birth date (optional)', birth, h('span', { class: 'help' }, 'Used only for the age rule (≤18 or ≥50 → at least 20 days).'))
+    ),
+    b.configured && starts.length ? h('label', { class: 'field', style: { marginTop: '14px' } }, 'Count Teams leave from', track,
+      h('span', { class: 'help' }, 'Leave from Teams before this date is not counted – it must already be included in the carried-in balance below. ' +
+        'For people hired in the last ~13 months choose the hire date: then leave taken in the first year is deducted from their first entitlement.')) : null,
+    b.configured ? h('div', { style: { marginTop: '16px' } },
+      h('h3', null, 'Balance carried into ' + LT.date(b.trackingStart)),
+      fromHire
+        ? h('p', { class: 'small muted' }, 'Tracking starts on the hire date, so everything is counted from Teams and the carried-in balance is normally 0.')
+        : h('p', { class: 'small muted' },
+            'Unused leave from the leave years before ' + LT.date(b.trackingStart) + '. Automatic value: ' + LT.days(b.openingAuto) +
+            ' — everything earned before, assuming none of it was used.'),
+      h('div', { class: 'row' },
+        h('label', { class: 'row small' }, openingAuto, 'Use automatic value'),
+        opening, h('span', { class: 'muted small' }, 'days'),
+        h('span', { class: 'spacer' }),
+        h('label', { class: 'row small' }, confirmed, 'Checked and confirmed')),
+      h('div', { class: 'notice', style: { marginTop: '12px' } },
+        h('div', { class: 'small', style: { marginBottom: '6px' } }, h('b', null, 'Easier: '), 'enter the balance this person has left today (after all leave taken up to today). The carried-in balance is calculated for you, and future approved leave is deducted when it happens.'),
+        h('div', { class: 'row' }, h('span', { class: 'small muted' }, 'Remaining today (' + LT.date(S.data.today) + ')'), remainingToday, h('span', { class: 'muted small' }, 'days'),
+          h('button', { onclick: () => act(async () => {
+            if (remainingToday.value === '') throw new Error('Enter the remaining days');
+            await LT.post('admin-employee-save', { login: user.login, hireDate: profile.hireDate, trackFrom: track.value || null, remainingToday: remainingToday.value });
+            await refresh(true);
+          }, 'Carried-in balance calculated') }, 'Calculate')),
+        profile.openingFromRemaining ? h('div', { class: 'small muted', style: { marginTop: '6px' } },
+          'Last set from a remaining balance of ' + LT.days(profile.openingFromRemaining.remaining) + ' on ' + LT.date(profile.openingFromRemaining.on) + '.') : null)
+    ) : null,
+    h('div', { class: 'row', style: { marginTop: '16px' } }, h('span', { class: 'spacer' }),
+      h('button', { class: 'primary', onclick: () => act(async () => {
+        const trackChanged = b.configured && track.value && track.value !== b.trackingStart;
+        await LT.post('admin-employee-save', {
+          login: user.login, hireDate: hire.value, birthDate: birth.value || null,
+          trackFrom: b.configured ? (track.value || null) : undefined,
+          openingDays: openingAuto.checked ? null : opening.value, openingConfirmed: confirmed.checked
+        });
+        if (trackChanged) { try { await LT.post('admin-sync', {}); } catch (e) { /* shown on the Teams tab */ } }
+        await refresh(true);
+      }, 'Saved') }, 'Save profile'))
+  );
+  wrap.appendChild(profileCard);
+  if (!b.configured) return wrap;
+
+  // leave years with entitlement overrides
+  const ovInputs = {};
+  const periodsCard = h('div', { class: 'card' },
+    h('h3', null, 'Leave years'),
+    h('p', { class: 'small muted' }, 'Entitlement is calculated from years of service on each work anniversary. Type a number to override it for one year; clear it to go back to automatic.'),
+    h('table', null,
+      h('thead', null, h('tr', null, h('th', null, 'Leave year'), h('th', { class: 'num' }, 'Carried in'), h('th', { class: 'num' }, 'Entitlement'),
+        h('th', { class: 'num' }, 'Adj.'), h('th', { class: 'num' }, 'Used'), h('th', { class: 'num' }, 'Remaining'))),
+      h('tbody', null, b.periods.slice().reverse().map(p => {
+        const inp = h('input', { type: 'number', step: '0.5', placeholder: String(p.entitlementAuto), value: p.entitlementOverridden ? p.entitlement : '', title: p.entitlementRule, style: { width: '76px' } });
+        ovInputs[p.start] = inp;
+        return h('tr', null,
+          h('td', null, LT.range(p.start, p.end), p.isCurrent ? h('span', { class: 'badge accent', style: { marginLeft: '6px' } }, 'current') : null,
+            h('div', { class: 'small muted' }, p.seniorityYears + ' y service')),
+          h('td', { class: 'num' }, LT.n(p.carryIn)),
+          h('td', { class: 'num' }, inp),
+          h('td', { class: 'num' }, LT.signed(p.adjustments)),
+          h('td', { class: 'num' }, LT.n(p.usedDays)),
+          h('td', { class: 'num', style: { fontWeight: 600, color: p.remainingDays < 0 ? 'var(--bad)' : '' } }, LT.n(p.remainingDays)));
+      }))),
+    h('div', { class: 'row', style: { marginTop: '12px' } },
+      h('span', { class: 'small muted' }, 'Next anniversary ' + LT.date(b.nextAnniversary.date) + ': +' + LT.days(b.nextAnniversary.entitlement)),
+      h('span', { class: 'spacer' }),
+      h('button', { onclick: () => act(async () => {
+        const entOverrides = {};
+        Object.keys(ovInputs).forEach(k => { entOverrides[k] = ovInputs[k].value === '' ? null : ovInputs[k].value; });
+        await LT.post('admin-employee-save', { login: user.login, hireDate: profile.hireDate, entOverrides });
+        await refresh(true);
+      }, 'Entitlements saved') }, 'Save entitlements'))
+  );
+  wrap.appendChild(periodsCard);
+
+  // adjustments
+  const cur = b.current || b.periods[b.periods.length - 1];
+  const adjDate = h('input', { type: 'date', value: S.data.today >= cur.start && S.data.today <= cur.end ? S.data.today : cur.start });
+  const adjAmount = h('input', { type: 'number', step: '0.5', placeholder: '+1 or -0.5' });
+  const adjUnit = h('select', null, h('option', { value: 'days' }, 'days'), h('option', { value: 'hours' }, 'hours'));
+  const adjNote = h('input', { type: 'text', placeholder: 'Reason (visible to the employee)', style: { flex: '1', minWidth: '180px' } });
+  const allAdj = (profile.adjustments || []).slice().sort((a, c) => (a.date < c.date ? 1 : -1));
+  wrap.appendChild(h('div', { class: 'card' },
+    h('h3', null, 'Manual adjustments'),
+    h('p', { class: 'small muted' }, 'Add days (e.g. extra leave) or subtract them (e.g. leave taken outside Teams). The date decides which leave year it belongs to.'),
+    h('div', { class: 'row' }, adjDate, adjAmount, adjUnit, adjNote,
+      h('button', { onclick: () => act(async () => {
+        const v = Number(adjAmount.value);
+        if (!v) throw new Error('Enter a non-zero amount');
+        const days = adjUnit.value === 'hours' ? v / S.data.calendar.workdayHours : v;
+        await LT.post('admin-adjustment-add', { login: user.login, date: adjDate.value, days: Math.round(days * 100) / 100, note: adjNote.value });
+        await refresh(true);
+      }, 'Adjustment added') }, 'Add')),
+    allAdj.length ? h('table', { style: { marginTop: '10px' } }, h('tbody', null, allAdj.map(a => h('tr', null,
+      h('td', null, LT.date(a.date)), h('td', { class: 'num' }, LT.signed(a.days) + ' d'), h('td', null, a.note),
+      h('td', { class: 'small muted' }, a.byName || a.by),
+      h('td', null, h('button', { class: 'link', onclick: () => act(async () => {
+        await LT.post('admin-adjustment-remove', { login: user.login, id: a.id }); await refresh(true);
+      }, 'Removed') }, 'Remove'))))))
+      : null
+  ));
+
+  // records (with per-leave corrections), filtered by a period – default: last month + upcoming
+  const today = S.data.today;
+  const monthsBack = n => { const d = new Date(Date.parse(today + 'T00:00:00Z')); d.setUTCMonth(d.getUTCMonth() - n); return d.toISOString().slice(0, 10); };
+  const curYear = b.current || b.periods[b.periods.length - 1];
+  const presets = {
+    m1: { label: 'Last month and upcoming', from: monthsBack(1), to: null },
+    m3: { label: 'Last 3 months and upcoming', from: monthsBack(3), to: null },
+    up: { label: 'Upcoming only', from: today, to: null },
+    ly: { label: 'Current leave year', from: curYear.start, to: curYear.end },
+    cy: { label: 'Calendar year ' + today.slice(0, 4), from: today.slice(0, 4) + '-01-01', to: today.slice(0, 4) + '-12-31' },
+    all: { label: 'All', from: null, to: null },
+    custom: { label: 'Custom range…' }
+  };
+  if (!S.recRange) S.recRange = { key: 'm1' };
+  const rr = S.recRange;
+  const range = rr.key === 'custom' ? { from: rr.from || null, to: rr.to || null } : presets[rr.key];
+  const shown = b.records.filter(r => r.lastDay && (!range.from || r.lastDay >= range.from) && (!range.to || r.firstDay <= range.to));
+  const rangeSel = h('select', { 'aria-label': 'Period of leave to list' }, Object.keys(presets).map(k => h('option', { value: k }, presets[k].label)));
+  rangeSel.value = rr.key;
+  rangeSel.addEventListener('change', () => {
+    S.recRange = rangeSel.value === 'custom'
+      ? { key: 'custom', from: range.from || monthsBack(1), to: range.to || today }
+      : { key: rangeSel.value };
+    render();
+  });
+  const rangeControls = [rangeSel];
+  if (rr.key === 'custom') {
+    const from = h('input', { type: 'date', value: rr.from || '', 'aria-label': 'From' });
+    const to = h('input', { type: 'date', value: rr.to || '', 'aria-label': 'To' });
+    const apply = () => {
+      let a = from.value || null, c = to.value || null;
+      if (a && c && a > c) { const t = a; a = c; c = t; }
+      S.recRange = { key: 'custom', from: a, to: c };
+      render();
+    };
+    from.addEventListener('change', apply); to.addEventListener('change', apply);
+    rangeControls.push(h('span', { class: 'muted small' }, 'from'), from, h('span', { class: 'muted small' }, 'to'), to);
+  }
+  const recTable = h('tbody');
+  shown.forEach(r => {
+    const charged = r.hours < b.workdayHours ? LT.hours(r.hours) : LT.days(r.days);
+    const changed = r.override && Math.abs(r.originalHours - r.hours) > 0.001;
+    const badges = [];
+    if (r.beforeTracking) badges.push(h('span', { class: 'badge neutral' }, 'before tracking'));
+    else badges.push(r.deducts ? h('span', { class: 'badge accent' }, 'annual leave') : h('span', { class: 'badge neutral' }, 'not deducted'));
+    if (r.unshared) badges.push(h('span', { class: 'badge warn', title: r.sharedStart
+      ? 'Changed in the Shifts schedule but not shared with the team yet. The employee still sees ' + LT.range(r.sharedStart.slice(0, 10), r.sharedEnd.slice(0, 10)) + ' in Teams.'
+      : 'Added in the Shifts schedule but not shared with the team yet.' }, 'not shared in Teams'));
+    if (r.override) badges.push(h('span', { class: 'badge good', title: r.override.note + ' — ' + (r.override.byName || r.override.by) },
+      r.override.mode === 'exclude' ? 'corrected: not counted' : 'corrected'));
+    const formRow = h('tr', { style: { display: 'none' } });
+    const toggle = h('button', { class: 'link', onclick: () => { formRow.style.display = formRow.style.display === 'none' ? '' : 'none'; } }, r.override ? 'Edit' : 'Correct');
+    recTable.appendChild(h('tr', null,
+      h('td', null, LT.range(r.firstDay, r.lastDay)),
+      h('td', null, r.reasonName),
+      h('td', { class: 'num' }, charged, changed ? h('div', { class: 'small muted', style: { textDecoration: 'line-through' } },
+        r.originalHours < b.workdayHours ? LT.hours(r.originalHours) : LT.days(r.originalHours / b.workdayHours)) : null),
+      h('td', null, h('div', { class: 'row', style: { gap: '4px' } }, badges)),
+      h('td', null, toggle)));
+    // inline correction form
+    const mode = h('select', null, h('option', { value: 'hours' }, 'Charge'), h('option', { value: 'exclude' }, 'Don\'t count this leave'));
+    const amount = h('input', { type: 'number', step: '0.5', min: '0', placeholder: 'e.g. 1', style: { width: '80px' } });
+    const unit = h('select', null, h('option', { value: 'days' }, 'days'), h('option', { value: 'hours' }, 'hours'));
+    const note = h('input', { type: 'text', placeholder: 'Why? (visible to the employee)', style: { flex: '1', minWidth: '200px' } });
+    if (r.override) {
+      mode.value = r.override.mode;
+      if (r.override.mode === 'hours') amount.value = LT.n(r.override.hours / b.workdayHours).replace(/,/g, '');
+      note.value = r.override.note || '';
+    }
+    const syncMode = () => { amount.style.display = unit.style.display = mode.value === 'exclude' ? 'none' : ''; };
+    mode.addEventListener('change', syncMode); syncMode();
+    formRow.appendChild(h('td', { colspan: '5', style: { background: 'var(--surface-2)' } },
+      h('div', { class: 'row' }, mode, amount, unit, note,
+        h('button', { class: 'primary', onclick: () => act(async () => {
+          const body = { login: user.login, recId: r.id, mode: mode.value, note: note.value };
+          if (mode.value === 'hours') { if (amount.value === '') throw new Error('Enter the amount to charge'); body[unit.value] = amount.value; }
+          await LT.post('admin-record-override', body);
+          await refresh(true);
+        }, 'Leave corrected') }, 'Save'),
+        r.override ? h('button', { onclick: () => act(async () => {
+          await LT.post('admin-record-override', { login: user.login, recId: r.id, mode: 'clear' });
+          await refresh(true);
+        }, 'Correction removed') }, 'Reset to Teams') : null),
+      h('div', { class: 'small muted', style: { marginTop: '6px' } },
+        'Use this when the leave in Teams is wrong and you can\'t fix it there. Teams currently says ' + LT.range(r.firstDay, r.lastDay) +
+        ' = ' + (r.originalHours < b.workdayHours ? LT.hours(r.originalHours) : LT.days(r.originalHours / b.workdayHours)) +
+        '. The correction stays in place after every sync until you reset it.')));
+    recTable.appendChild(formRow);
+  });
+  wrap.appendChild(h('div', { class: 'card' },
+    h('div', { class: 'row', style: { marginBottom: '8px' } },
+      h('h3', { style: { margin: 0 } }, 'Leave from Teams'),
+      h('span', { class: 'spacer' }),
+      h('span', { class: 'small muted' }, 'Showing ' + shown.length + ' of ' + b.records.length)),
+    h('div', { class: 'row', style: { marginBottom: '10px', gap: '8px' } }, rangeControls),
+    shown.some(r => r.unshared) ? h('div', { class: 'notice warn small', style: { marginBottom: '10px' } },
+      'Some leave was changed in the Shifts schedule but not shared with the team yet. It is counted as you see it in the schedule. ' +
+      'Click "Share with team" in Shifts so the employee sees the same in Teams.') : null,
+    shown.length ? h('table', null,
+      h('thead', null, h('tr', null, h('th', null, 'Dates'), h('th', null, 'Type'), h('th', { class: 'num' }, 'Charged'), h('th', null, ''), h('th', null, ''))),
+      recTable)
+      : h('p', { class: 'muted small' }, !b.records.length
+        ? (S.data.sync.configured ? 'No leave found in Teams for this person yet.' : 'Teams is not connected yet.')
+        : 'No leave in this period. Choose a longer period or "All" to see older leave.'),
+    b.records.some(r => r.unshared) && !shown.some(r => r.unshared) ? h('p', { class: 'small', style: { color: 'var(--warn)', marginTop: '8px' } },
+      'Some leave outside this period was changed in the Shifts schedule but not shared with the team yet.') : null
+  ));
+  return wrap;
+}
+
+async function openAddEmployee() {
+  let users;
+  try { users = await loadUsers(); } catch (e) { LT.toast('Could not load users: ' + e.message, true); return; }
+  const tracked = new Set(S.data.employees.map(e => e.login));
+  let chosen = null;
+  const search = h('input', { type: 'text', placeholder: 'Search by name, login or e-mail', style: { width: '100%' } });
+  const listEl = h('div', { class: 'userpick' });
+  const hire = h('input', { type: 'date' });
+  const birth = h('input', { type: 'date' });
+  function draw() {
+    const q = search.value.trim().toLowerCase();
+    clear(listEl);
+    users.filter(u => !tracked.has(u.login) && (!q || (u.name + ' ' + u.login + ' ' + u.email).toLowerCase().includes(q))).slice(0, 50)
+      .forEach(u => listEl.appendChild(h('div', { class: chosen === u.login ? 'sel' : '', onclick: () => { chosen = u.login; draw(); } },
+        u.name, h('span', { class: 'small muted' }, '  ' + (u.email || u.login)))));
+  }
+  search.addEventListener('input', draw);
+  draw();
+  const close = () => { S.modal = null; render(); };
+  S.modal = h('div', { class: 'modal-back', onclick: e => { if (e.target === S.modal) close(); } },
+    h('div', { class: 'modal', role: 'dialog' },
+      h('h2', null, 'Add employee'),
+      h('label', { class: 'field' }, 'Person', search), listEl,
+      h('div', { class: 'form-grid', style: { marginTop: '14px' } },
+        h('label', { class: 'field' }, 'Hire date', hire),
+        h('label', { class: 'field' }, 'Birth date (optional)', birth)),
+      h('p', { class: 'small muted', style: { marginTop: '12px' } }, 'Their leave is loaded from Teams right away. You can then enter the balance they have left today.'),
+      h('div', { class: 'actions' },
+        h('button', { onclick: close }, 'Cancel'),
+        h('button', { class: 'primary', onclick: () => act(async () => {
+          if (!chosen) throw new Error('Choose a person');
+          if (!hire.value) throw new Error('Enter the hire date');
+          await LT.post('admin-employee-save', { login: chosen, hireDate: hire.value, birthDate: birth.value || null });
+          if (S.data.sync.configured) { try { await LT.post('admin-sync', {}); } catch (e) { /* shown on the Teams tab */ } }
+          S.modal = null; S.selected = chosen;
+          await refresh(true);
+        }, 'Employee added') }, 'Add'))));
+  render();
+  search.focus();
+}
+
+async function removeEmployee(user) {
+  if (!window.confirm('Stop tracking leave for ' + user.name + '? Their data is kept and comes back if you add them again.')) return;
+  await act(async () => {
+    await LT.post('admin-employee-remove', { login: user.login });
+    S.selected = null; S.detail = null;
+    await refresh(false);
+  }, 'Removed from tracking');
+}
+
+// ---------------- leave types ----------------
+function renderTypes(root) {
+  const reasons = S.data.reasons;
+  const boxes = {};
+  root.appendChild(h('div', { class: 'card', style: { maxWidth: '760px' } },
+    h('h2', null, 'Leave types from Teams'),
+    h('p', { class: 'muted small' }, 'These are the reasons people pick in Teams ("Neden"). Tick the ones that are taken from the annual leave balance. Unticked types are only counted and shown. New types stay unticked until you review them.'),
+    reasons.length ? h('table', null,
+      h('thead', null, h('tr', null, h('th', null, 'Type'), h('th', null, 'Status'), h('th', null, 'Deducts from annual leave'))),
+      h('tbody', null, reasons.map(r => {
+        boxes[r.id] = h('input', { type: 'checkbox', checked: r.deducts });
+        return h('tr', null, h('td', null, r.name),
+          h('td', null, !r.reviewed ? h('span', { class: 'badge warn' }, 'Needs review') : !r.active ? h('span', { class: 'badge neutral' }, 'Inactive in Teams') : h('span', { class: 'badge good' }, 'Reviewed')),
+          h('td', null, h('label', { class: 'row small' }, boxes[r.id], 'Yes')));
+      })))
+      : h('p', { class: 'muted' }, S.data.sync.configured ? 'No types yet – run a sync from the Teams connection tab.' : 'Types appear after Teams is connected.'),
+    reasons.length ? h('div', { class: 'row', style: { marginTop: '14px' } }, h('span', { class: 'spacer' }),
+      h('button', { class: 'primary', onclick: () => act(async () => {
+        const map = {};
+        Object.keys(boxes).forEach(id => { map[id] = { deducts: boxes[id].checked }; });
+        await LT.post('admin-config-save', { reasons: map });
+        await refresh(!!S.selected);
+      }, 'Leave types saved') }, 'Save')) : null
+  ));
+}
+
+// ---------------- calendar ----------------
+function renderCalendar(root) {
+  const c = S.data.calendar;
+  const year = S.data.today.slice(0, 4);
+  const hours = h('input', { type: 'number', step: '0.5', min: '1', max: '24', value: c.workdayHours });
+  const weekend = {};
+  const offset = h('input', { type: 'number', step: '0.5', value: c.utcOffsetMinutes / 60 });
+  const dst = h('select', null,
+    h('option', { value: 'NONE' }, 'None'),
+    h('option', { value: 'EU' }, 'EU summer time (+1 h)'));
+  dst.value = c.dstRule || 'NONE';
+  const country = h('select', { 'aria-label': 'Built-in public holidays' },
+    Object.keys(c.countries).map(k => h('option', { value: k }, c.countries[k])));
+  country.value = c.holidayCountry;
+  const autoList = h('div');
+  const help = h('p', { class: 'small muted' });
+  const HELP = {
+    TR: 'Religious holidays (Ramadan Feast, Sacrifice Feast) move every year – add them below when they are announced. Eve days are half days (from 13:00).',
+    DE: 'Only holidays observed in every federal state are built in. Add your state\'s regional holidays below (for example Epiphany, Corpus Christi, Reformation Day or All Saints\' Day), and Christmas Eve or New Year\'s Eve as half days if your company gives them.',
+    NONE: 'No holidays are added automatically. Add every public holiday below.'
+  };
+  function drawAuto() {
+    clear(autoList);
+    const list = (c.fixedByCountry[country.value] || []);
+    if (list.length) {
+      autoList.appendChild(h('div', { class: 'small muted', style: { margin: '10px 0 6px' } }, 'Added automatically every year (' + year + ' shown):'));
+      autoList.appendChild(h('div', { class: 'holiday-grid' }, list.map(x =>
+        h('div', { class: 'row small', style: { gap: '8px' } },
+          h('span', { class: 'muted', style: { minWidth: '52px' } }, LT.date(x.date).replace(/ \d{4}$/, '')),
+          h('span', null, x.name), x.half ? h('span', { class: 'badge neutral' }, 'half day') : null))));
+    }
+    help.textContent = HELP[country.value] || '';
+  }
+  country.addEventListener('change', () => {
+    // sensible time-zone defaults for the chosen country (can be changed before saving)
+    if (country.value === 'DE') { offset.value = 1; dst.value = 'EU'; }
+    if (country.value === 'TR') { offset.value = 3; dst.value = 'NONE'; }
+    drawAuto();
+  });
+  drawAuto();
+
+  const rows = c.holidays.map(x => Object.assign({}, x));
+  const tbody = h('tbody');
+  function drawRows() {
+    clear(tbody);
+    rows.forEach((r, i) => tbody.appendChild(h('tr', null,
+      h('td', null, h('input', { type: 'date', value: r.date, oninput: e => { r.date = e.target.value; } })),
+      h('td', null, h('input', { type: 'text', value: r.name, style: { width: '100%' }, oninput: e => { r.name = e.target.value; } })),
+      h('td', null, h('label', { class: 'row small' }, h('input', { type: 'checkbox', checked: r.half, onchange: e => { r.half = e.target.checked; } }), 'Half day')),
+      h('td', null, h('button', { class: 'link', onclick: () => { rows.splice(i, 1); drawRows(); } }, 'Remove')))));
+  }
+  drawRows();
+
+  root.appendChild(h('div', { class: 'stack', style: { maxWidth: '860px' } },
+    h('div', { class: 'card' },
+      h('h2', null, 'Working time'),
+      h('div', { class: 'form-grid' },
+        h('label', { class: 'field' }, 'Working hours per day', hours, h('span', { class: 'help' }, 'Used to turn hourly leave into days.')),
+        h('label', { class: 'field' }, 'UTC offset (hours, winter)', offset, h('span', { class: 'help' }, 'Türkiye: 3 · Germany: 1')),
+        h('label', { class: 'field' }, 'Daylight saving time', dst, h('span', { class: 'help' }, 'Last Sunday of March to last Sunday of October. Germany: EU summer time.'))),
+      h('div', { style: { marginTop: '14px' } }, h('div', { class: 'small muted', style: { marginBottom: '6px' } }, 'Non-working days (never deducted)'),
+        h('div', { class: 'row' }, WEEKDAYS.map(([n, label]) => {
+          weekend[n] = h('input', { type: 'checkbox', checked: c.weekendDays.includes(n) });
+          return h('label', { class: 'row small' }, weekend[n], label);
+        })))
+    ),
+    h('div', { class: 'card' },
+      h('h2', null, 'Public holidays'),
+      h('label', { class: 'field', style: { maxWidth: '320px' } }, 'Built-in public holidays', country),
+      autoList,
+      h('h3', { style: { marginTop: '18px' } }, 'Other days off'),
+      help,
+      h('table', null, h('thead', null, h('tr', null, h('th', null, 'Date'), h('th', null, 'Name'), h('th', null, ''), h('th', null, ''))), tbody),
+      h('div', { class: 'row', style: { marginTop: '10px' } },
+        h('button', { onclick: () => { rows.push({ date: '', name: '', half: false }); drawRows(); } }, '+ Add day'))
+    ),
+    h('div', { class: 'row' }, h('span', { class: 'spacer' }),
+      h('button', { class: 'primary', onclick: () => act(async () => {
+        await LT.post('admin-config-save', {
+          workdayHours: hours.value,
+          utcOffsetMinutes: Math.round(Number(offset.value) * 60),
+          dstRule: dst.value,
+          weekendDays: WEEKDAYS.map(([n]) => n).filter(n => weekend[n].checked),
+          holidayCountry: country.value,
+          holidays: rows.filter(r => r.date)
+        });
+        await refresh(!!S.selected);
+      }, 'Calendar saved') }, 'Save'))
+  ));
+}
+
+// ---------------- rules ----------------
+function renderRules(root) {
+  const tiers = S.data.tiers.map(t => Object.assign({}, t));
+  const ar = S.data.ageRule || {};
+  const tbody = h('tbody');
+  function draw() {
+    clear(tbody);
+    tiers.forEach((t, i) => tbody.appendChild(h('tr', null,
+      h('td', null, 'From ', h('input', { type: 'number', min: '1', value: t.fromYears, oninput: e => { t.fromYears = e.target.value; } }), ' years of service'),
+      h('td', null, h('input', { type: 'number', step: '0.5', value: t.days, oninput: e => { t.days = e.target.value; } }), ' days'),
+      h('td', null, tiers.length > 1 ? h('button', { class: 'link', onclick: () => { tiers.splice(i, 1); draw(); } }, 'Remove') : null))));
+  }
+  draw();
+  const arEnabled = h('input', { type: 'checkbox', checked: ar.enabled !== false });
+  const arMin = h('input', { type: 'number', value: ar.minDays || 20 });
+  const arYoung = h('input', { type: 'number', value: ar.youngMaxAge || 18 });
+  const arOld = h('input', { type: 'number', value: ar.oldMinAge || 50 });
+  root.appendChild(h('div', { class: 'stack', style: { maxWidth: '760px' } },
+    h('div', { class: 'card' },
+      h('h2', null, 'Annual leave by years of service'),
+      h('p', { class: 'small muted' }, 'On each work anniversary the employee receives the days of the matching tier; unused days carry over. Legal minimums (Labour Law art. 53): 1–5 years 14, 6–14 years 20, 15+ years 26 days.'),
+      h('table', null, tbody),
+      h('button', { style: { marginTop: '10px' }, onclick: () => { tiers.push({ fromYears: '', days: '' }); draw(); } }, '+ Add tier')),
+    h('div', { class: 'card' },
+      h('h2', null, 'Age rule'),
+      h('label', { class: 'row small' }, arEnabled, 'Give at least ', arMin, ' days to employees aged ', arYoung, ' or younger, or ', arOld, ' or older'),
+      h('p', { class: 'small muted', style: { marginTop: '8px' } }, 'Applies only to employees with a birth date in their profile.')),
+    h('div', { class: 'row' }, h('span', { class: 'spacer' }),
+      h('button', { class: 'primary', onclick: () => act(async () => {
+        await LT.post('admin-config-save', {
+          tiers: tiers.filter(t => t.fromYears !== '' && t.days !== ''),
+          ageRule: { enabled: arEnabled.checked, minDays: arMin.value, youngMaxAge: arYoung.value, oldMinAge: arOld.value }
+        });
+        await refresh(!!S.selected);
+      }, 'Rules saved') }, 'Save'))
+  ));
+}
+
+// ---------------- teams ----------------
+function renderTeams(root) {
+  const s = S.data.sync;
+  const interval = h('input', { type: 'number', min: '5', value: s.intervalMinutes });
+  const useDrafts = h('input', { type: 'checkbox', checked: s.useDrafts !== false });
+  useDrafts.addEventListener('change', () => act(async () => {
+    await LT.post('admin-config-save', { useDrafts: useDrafts.checked });
+    await LT.post('admin-sync', {});
+    await refresh(!!S.selected);
+  }, 'Saved – leave re-read from Teams'));
+  const statusCard = h('div', { class: 'card' },
+    h('h2', null, 'Microsoft Teams Shifts'),
+    s.configured
+      ? h('div', null,
+          h('p', null, 'Last sync: ', h('b', null, LT.ago(s.lastSyncAt)),
+            s.lastSyncSummary ? h('span', { class: 'muted small' }, ' · ' + s.lastSyncSummary.items + ' leave items since ' + LT.date(s.lastSyncSummary.since) + ', ' + s.lastSyncSummary.updatedUsers + ' people updated') : null),
+          s.lastSyncError ? h('div', { class: 'notice bad', style: { margin: '8px 0' } }, s.lastSyncError.message) : null,
+          s.lastSyncSummary && s.lastSyncSummary.unshared ? h('div', { class: 'notice warn small', style: { margin: '8px 0' } },
+            s.lastSyncSummary.unshared + ' leave item(s) were changed in the Shifts schedule but not shared with the team yet. ' +
+            (s.useDrafts ? 'They are counted as they appear in the schedule. ' : 'They are counted as employees see them in Teams. ') +
+            'Click "Share with team" in Shifts to publish the changes.') : null,
+          h('label', { class: 'row small', style: { marginTop: '8px' } }, useDrafts,
+            'Count changes made in the Shifts schedule right away, even before they are shared with the team (recommended)'),
+          h('div', { class: 'row', style: { marginTop: '10px' } },
+            h('button', { class: 'primary', onclick: async (ev) => {
+              ev.target.disabled = true; ev.target.textContent = 'Syncing…';
+              try {
+                const r = await LT.post('admin-sync', {});
+                if (r.error) LT.toast('Sync failed: ' + r.error, true); else LT.toast('Sync finished');
+                await refresh(!!S.selected);
+              } catch (e) { LT.toast(e.message, true); ev.target.disabled = false; ev.target.textContent = 'Sync now'; }
+            } }, 'Sync now'),
+            h('span', { class: 'spacer' }),
+            h('label', { class: 'row small' }, 'Refresh automatically when someone opens Leaves and data is older than', interval, 'min'),
+            h('button', { onclick: () => act(async () => { await LT.post('admin-config-save', { syncIntervalMinutes: interval.value }); await refresh(false); }, 'Saved') }, 'Save')))
+      : h('div', null,
+          h('p', null, 'Not connected. Fill in these values under ', h('b', null, 'Administration → Apps → Leave Sync for YouTrack → Settings'), ':'),
+          h('ul', { class: 'small' },
+            h('li', null, 'Microsoft Entra tenant ID, Application (client) ID and Client secret of an app registration with the ', h('b', null, 'Schedule.Read.All'), ' and ', h('b', null, 'User.Read.All'), ' application permissions (admin consent granted).'),
+            h('li', null, 'The Teams team ID whose Shifts schedule holds the time off.'),
+            h('li', null, 'Optionally a "Leave administrators" group – System admins always have access.')))
+  );
+
+  const users = S.users;
+  const unmatched = S.data.unmatched;
+  const unmatchedCard = h('div', { class: 'card' },
+    h('h2', null, 'People in Teams not matched to YouTrack'),
+    h('p', { class: 'small muted' }, 'People are matched by e-mail. If an address differs, link them here.'),
+    unmatched.length ? h('table', null, h('tbody', null, unmatched.map(u => {
+      const sel = h('select', null, h('option', { value: '' }, users ? 'Choose YouTrack user…' : 'Loading users…'),
+        (users || []).map(x => h('option', { value: x.login }, x.name + (x.email ? ' (' + x.email + ')' : ''))));
+      return h('tr', null,
+        h('td', null, u.name || 'Unknown', h('div', { class: 'small muted' }, u.email || u.aadId)),
+        h('td', null, sel),
+        h('td', null, h('button', { onclick: () => act(async () => {
+          if (!sel.value) throw new Error('Choose a user');
+          await LT.post('admin-map-user', { aadId: u.aadId, login: sel.value }); await refresh(false);
+        }, 'Linked – their leave will appear after the next sync') }, 'Link')));
+    }))) : h('p', { class: 'muted' }, 'Everyone is matched.'));
+
+  const manual = Object.keys(S.data.userMap || {});
+  const mapCard = manual.length ? h('div', { class: 'card' },
+    h('h2', null, 'Matched people'),
+    h('table', null, h('tbody', null, manual.map(id => h('tr', null,
+      h('td', null, nameOf(S.data.userMap[id])), h('td', { class: 'small muted' }, S.data.userMap[id]),
+      h('td', null, h('button', { class: 'link', onclick: () => act(async () => { await LT.post('admin-map-user', { aadId: id, login: null }); await refresh(false); }, 'Unlinked') }, 'Unlink'))))))) : null;
+
+  root.appendChild(h('div', { class: 'stack', style: { maxWidth: '900px' } }, statusCard, unmatchedCard, mapCard));
+  if (!users && unmatched.length) loadUsers().then(() => { if (S.tab === 'teams') render(); }).catch(() => {});
+}
+
+function nameOf(login) {
+  const e = S.data.employees.find(x => x.login === login);
+  if (e) return e.name;
+  const u = (S.users || []).find(x => x.login === login);
+  return u ? u.name : login;
+}
+
+// ---------------- history ----------------
+async function renderHistory(root) {
+  const card = h('div', { class: 'card' }, h('h2', null, 'Change history'), h('div', { class: 'loading' }, 'Loading…'));
+  root.appendChild(card);
+  try {
+    const { entries } = await LT.get('admin-audit');
+    card.removeChild(card.lastChild);
+    card.appendChild(entries.length ? h('table', null,
+      h('thead', null, h('tr', null, h('th', null, 'When'), h('th', null, 'Who'), h('th', null, 'What'), h('th', null, 'Employee'), h('th', null, 'Details'))),
+      h('tbody', null, entries.map(e => h('tr', null,
+        h('td', { class: 'small' }, LT.date(e.at.slice(0, 10)) + ' ' + e.at.slice(11, 16) + ' UTC'),
+        h('td', null, e.byName || e.by), h('td', null, e.action), h('td', null, e.target || ''),
+        h('td', { class: 'small muted', style: { maxWidth: '360px', wordBreak: 'break-word' } }, e.details ? JSON.stringify(e.details) : '')))))
+      : h('p', { class: 'muted' }, 'No changes yet.'));
+  } catch (e) {
+    card.lastChild.textContent = e.message;
+  }
+}
+
+// ---------------- start ----------------
+try {
+  await loadState();
+  render();
+  if (S.data.sync.configured) {
+    LT.post('sync', {}).then(r => { if (r && r.ran) refresh(!!S.selected); }).catch(() => {});
+  }
+} catch (e) {
+  clear(app).appendChild(h('div', { class: 'notice bad' }, 'Could not load Leave Management: ' + e.message));
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+<p><b>Leave balances for everyone in YouTrack, synced from Microsoft Teams Shifts.</b></p>
+
+<p>Employees request time off in Microsoft Teams Shifts as usual. Leave Sync for YouTrack reads the approved time off and adds a <b>Leaves</b> page to the YouTrack main menu. There, every user sees their own remaining leave, their usage by leave type and their leave history. Administrators see the whole team in one table and manage hire dates, entitlements and holidays in YouTrack.</p>
+
+<h3>For employees</h3>
+<ul>
+  <li><b>Remaining annual leave</b> in days and hours, with this year's entitlement, the balance carried over and the leave used.</li>
+  <li><b>Usage by leave type</b> (for example vacation, sick day or parental leave) for a leave year, a calendar year or any custom date range.</li>
+  <li><b>Leave history</b> including approved upcoming leave, with corrections and notes from the manager.</li>
+  <li>Users only ever see their own data. This is enforced on the server.</li>
+</ul>
+
+<h3>For administrators</h3>
+<ul>
+  <li><b>Team overview:</b> remaining leave, annual leave used, other leave and a column per leave type for every employee, with team totals for any period.</li>
+  <li><b>Open any employee's page</b> exactly as they see it.</li>
+  <li><b>Seniority-based entitlement</b> granted automatically on each work anniversary, with carry-over of unused leave and an optional age rule. Every value can be overridden per person and per year.</li>
+  <li><b>Easy onboarding:</b> enter how many days a person has left today, and the opening balance is calculated for you.</li>
+  <li><b>Leave types from Teams:</b> choose which time-off reasons are deducted from annual leave. Others are only counted.</li>
+  <li><b>Corrections:</b> changes made in the Shifts schedule count right away, even before they are shared. Any single leave can also be corrected in YouTrack, with a required note.</li>
+  <li><b>Change history</b> of every administrative change.</li>
+</ul>
+
+<h3>How leave is counted</h3>
+<ul>
+  <li>Leave is tracked in hours: partial-day and hourly leave are counted exactly.</li>
+  <li>Weekends and public holidays are never deducted. Half-day holidays count as half a day.</li>
+  <li><b>Built-in public holidays for Türkiye and Germany</b>, with Easter-based dates calculated every year. You can add regional or company holidays yourself, or choose no built-in holidays at all.</li>
+  <li>Company time zone with optional <b>EU summer time</b>.</li>
+  <li>The working hours per day, the non-working days and the seniority tiers are configurable. The default entitlement tiers follow Turkish labour law (14 / 20+ / 26 days).</li>
+</ul>
+
+<h3>Requirements</h3>
+<ul>
+  <li>YouTrack 2026.2 or later (Cloud or Server).</li>
+  <li>Microsoft Teams with <b>Shifts</b> used for time-off requests.</li>
+  <li>A Microsoft Entra app registration with the <code>Schedule.Read.All</code> and <code>User.Read.All</code> application permissions. The Getting Started section shows each step.</li>
+</ul>
+
+<h3>Data and privacy</h3>
+<ul>
+  <li>The app connects only to Microsoft: <code>login.microsoftonline.com</code> to sign in with your app registration, and <code>graph.microsoft.com</code> to <b>read</b> time off, time-off reasons and the user e-mail addresses needed to match Teams users to YouTrack users. It never writes to Microsoft 365.</li>
+  <li>Leave data, hire dates and balances are stored in your YouTrack instance only. No data is sent to the app vendor or any other third party, and there is no telemetry or analytics.</li>
+  <li>The client secret is stored as a YouTrack secret setting and is never sent to the browser.</li>
+  <li>Privacy policy: <a href="https://example.com/privacy">https://example.com/privacy</a></li>
+</ul>

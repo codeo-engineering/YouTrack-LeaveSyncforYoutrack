@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Leave Sync for YouTrack – settings",
+  "description": "Connection to Microsoft Teams Shifts (Microsoft Graph app registration) and who may manage leave.",
+  "properties": {
+    "tenantId": {
+      "type": "string",
+      "title": "Microsoft Entra tenant ID",
+      "description": "Directory (tenant) ID of your Microsoft 365 organization.",
+      "x-scope": "GLOBAL"
+    },
+    "clientId": {
+      "type": "string",
+      "title": "Application (client) ID",
+      "description": "Client ID of the app registration that has Schedule.Read.All and User.Read.All application permissions.",
+      "x-scope": "GLOBAL"
+    },
+    "clientSecret": {
+      "type": "string",
+      "format": "secret",
+      "title": "Client secret",
+      "description": "Client secret value of the app registration.",
+      "x-scope": "GLOBAL"
+    },
+    "teamIds": {
+      "type": "string",
+      "title": "Teams team IDs",
+      "description": "ID of the team(s) whose Shifts schedule holds the time off. Separate several IDs with commas.",
+      "x-scope": "GLOBAL"
+    },
+    "adminGroup": {
+      "type": "object",
+      "x-entity": "UserGroup",
+      "title": "Leave administrators group",
+      "description": "Members of this group can manage leave. System administrators always can.",
+      "x-scope": "GLOBAL"
+    }
+  }
+}

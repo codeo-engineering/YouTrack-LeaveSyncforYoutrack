@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/youtrack-app.json",
+  "name": "leave-tracker",
+  "title": "Leave Sync for YouTrack",
+  "description": "Syncs approved time off from Microsoft Teams Shifts. Every employee sees their own leave balance, usage by type and history; admins see the whole team and manage hire dates, entitlements and holidays.",
+  "version": "1.2.0",
+  "icon": "icon.svg",
+  "vendor": {
+    "name": "Internal"
+  },
+  "widgets": [
+    {
+      "key": "leaves",
+      "name": "Leaves",
+      "description": "Your leave balance, usage by type and leave history",
+      "extensionPoint": "MAIN_MENU_ITEM",
+      "indexPath": "leaves/index.html",
+      "iconPath": "leaves/icon.svg"
+    },
+    {
+      "key": "leaves-admin",
+      "name": "Leave Management",
+      "description": "Employees, hire dates, entitlements, leave types, holidays and Teams connection",
+      "extensionPoint": "ADMINISTRATION_MENU_ITEM",
+      "indexPath": "leaves-admin/index.html",
+      "iconPath": "leaves-admin/icon.svg"
+    }
+  ]
+}
