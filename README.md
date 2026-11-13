@@ -25,6 +25,7 @@ Every employee gets a **Leaves** page in the YouTrack main menu with their own r
 - [Development](#development)
 - [Updating the app](#updating-the-app)
 - [Roadmap](#roadmap)
+- [License](#license)
 
 ---
 
@@ -293,3 +294,9 @@ Planned for the JetBrains Marketplace release (v2.0.0):
 - UI follows the YouTrack theme only (no separate theme toggle)
 - `ADMIN_UPDATE_APP` permission for app-wide settings
 - Input size limits and a 40×40 SVG logo
+
+---
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).
