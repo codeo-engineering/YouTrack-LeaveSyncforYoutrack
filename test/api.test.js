@@ -41,28 +41,86 @@ const graphData = {
     'aad-ghost': { id: 'aad-ghost', displayName: 'Ghost User', mail: 'ghost@other.com' }
   }
 };
-function resp(code, body) {
-  return { code, isSuccess: code >= 200 && code < 400, response: JSON.stringify(body), json: () => body };
+// Async HTTP mock: calls are queued and their responses handed to the named async function,
+// like YouTrack does after the scheduling transaction commits.
+const pendingAsync = [];
+let execution = null; // the execution that is currently running (handler or async function)
+graphData.pageSize = 1000;
+const graphFaults = []; // e.g. { url: /timesOff/, status: 429, times: 1 }
+function graphGet(url) {
+  const [p, qs] = url.split('?');
+  const params = new URLSearchParams(qs || '');
+  const fault = graphFaults.find(f => f.times > 0 && f.url.test(p));
+  if (fault) { fault.times--; return { status: fault.status, body: { error: { code: 'TooManyRequests', message: 'Throttled. Try later.' } } }; }
+  if (p.endsWith('/timeOffReasons')) return { status: 200, body: { value: graphData.reasons } };
+  if (p.endsWith('/timesOff')) {
+    const skip = +(params.get('$skiptoken') || 0);
+    const page = graphData.timesOff.slice(skip, skip + graphData.pageSize);
+    const body = { value: page };
+    if (skip + graphData.pageSize < graphData.timesOff.length) {
+      body['@odata.nextLink'] = 'https://graph.microsoft.com/v1.0' + p + '?$skiptoken=' + (skip + graphData.pageSize);
+    }
+    return { status: 200, body };
+  }
+  const m = /^\/users\/([^/?]+)$/.exec(p);
+  if (m) {
+    const u = graphData.users[decodeURIComponent(m[1])];
+    return u ? { status: 200, body: u } : { status: 404, body: { error: { code: 'Request_ResourceNotFound', message: 'Not found.' } } };
+  }
+  return { status: 404, body: {} };
 }
 class Connection {
   constructor(base) { this.base = base; this.headers = {}; }
   basicAuth(u, p) { this.auth = ['basic', u, p]; return this; }
   bearerAuth(t) { this.auth = ['bearer', t]; return this; }
   addHeader(k, v) { this.headers[k] = v; return this; }
-  postSync(uri, q, payload) {
+  postSync() { throw new Error('synchronous HTTP is not allowed'); }
+  getSync() { throw new Error('synchronous HTTP is not allowed'); }
+  postAsync(uri, q, payload, handler) {
+    assert.ok(execution, 'async call outside an execution');
+    assert.ok(!execution.scheduled, 'only one async call per execution');
+    execution.scheduled = true;
     graphCalls.push(['POST', this.base + uri, payload, this.auth]);
-    if (uri.endsWith('/oauth2/v2.0/token')) return resp(200, { access_token: 'tok' });
-    return resp(404, {});
+    let response;
+    if (uri.endsWith('/oauth2/v2.0/token')) {
+      response = graphData.tokenFails
+        ? { code: 401, isSuccess: false, body: JSON.stringify({ error: 'invalid_client', error_description: 'AADSTS7000215: Invalid client secret provided.\r\nTrace ID: x' }) }
+        : { code: 200, isSuccess: true, body: JSON.stringify({ access_token: 'tok', expires_in: 3599 }) };
+    } else if (uri === '/$batch') {
+      assert.deepStrictEqual(this.auth, ['bearer', 'tok']);
+      const reqs = JSON.parse(payload).requests;
+      assert.ok(reqs.length <= 20, 'batch limit');
+      graphData.batchSizes = (graphData.batchSizes || []).concat(reqs.length);
+      const responses = reqs.map(r => Object.assign({ id: r.id }, graphGet(r.url)));
+      response = { code: 200, isSuccess: true, body: JSON.stringify({ responses }) };
+    } else {
+      response = { code: 404, isSuccess: false, body: '{}' };
+    }
+    pendingAsync.push({ handler, response, stored: execution.stored, chain: execution.chain + 1 });
   }
-  getSync(uri, q) {
-    graphCalls.push(['GET', this.base + uri, q]);
-    if (uri.endsWith('/timeOffReasons')) return resp(200, { value: graphData.reasons });
-    if (uri.endsWith('/timesOff')) return resp(200, { value: graphData.timesOff });
-    const m = /^\/users\/(.+)$/.exec(uri);
-    if (m) { const u = graphData.users[decodeURIComponent(m[1])]; return u ? resp(200, u) : resp(404, {}); }
-    return resp(404, {});
+  getAsync() { throw new Error('not used'); }
+}
+
+/** Runs queued async functions until the chain ends, enforcing YouTrack's limits. */
+function drainAsync(user) {
+  let steps = 0;
+  while (pendingAsync.length) {
+    const job = pendingAsync.shift();
+    assert.ok(job.chain <= 10, 'async chain longer than 10 steps');
+    assert.ok(api.asyncFunctions[job.handler], 'async function ' + job.handler + ' is declared');
+    const stored = {};
+    execution = { scheduled: false, stored, chain: job.chain };
+    api.asyncFunctions[job.handler]({
+      currentUser: user, settings, globalStorage,
+      response: job.response,
+      store: (k, v) => { stored[k] = v; },
+      load: k => (k in job.stored ? job.stored[k] : null)
+    });
+    execution = null;
+    if (++steps > 200) throw new Error('runaway async chain');
   }
 }
+
 const origResolve = Module._resolveFilename;
 Module._resolveFilename = function (req, ...rest) {
   if (req === '@jetbrains/youtrack-scripting-api/entities') return 'MOCK_ENTITIES';
@@ -80,11 +138,18 @@ function call(user, method, p, { body, query } = {}) {
   const ep = api.endpoints.find(e => e.method === method && e.path === p);
   assert.ok(ep, 'endpoint ' + method + ' ' + p);
   const res = { code: 200, body: null, json(o) { this.body = JSON.parse(JSON.stringify(o)); } };
+  const stored = {};
+  execution = { scheduled: false, stored, chain: 0 };
   ep.handle({
     currentUser: user, settings, globalStorage,
     request: { json: () => body || {}, getParameter: n => (query || {})[n] ?? null },
-    response: res
+    response: res,
+    store: (k, v) => { stored[k] = v; },
+    load: () => null
   });
+  execution = null;
+  if (method === 'GET') assert.strictEqual(pendingAsync.length, 0, 'GET must not start background work');
+  drainAsync(user);
   return res;
 }
 
@@ -123,8 +188,13 @@ t('validation errors come back as 400', () => {
 
 t('admin sync imports Teams leave, reasons and unmatched people', () => {
   const r = call(admin, 'POST', 'admin-sync');
-  assert.strictEqual(r.code, 200, JSON.stringify(r.body));
-  assert.ok(r.body.summary, JSON.stringify(r.body));
+  assert.strictEqual(r.code, 202, JSON.stringify(r.body));
+  assert.strictEqual(r.body.phase, 'started');
+  const st = call(admin, 'GET', 'sync-status').body;
+  assert.strictEqual(st.phase, 'idle');
+  assert.ok(st.lastSyncSummary && st.lastSyncSummary.items === 3, JSON.stringify(st));
+  assert.strictEqual(globalStorage.extensionProperties.leaveSync, null, 'sync state is cleared');
+  assert.ok(!JSON.stringify(globalStorage.extensionProperties).includes('tok'), 'token never stored');
   const tokenCall = graphCalls.find(c => c[0] === 'POST');
   assert.deepStrictEqual(tokenCall[3], ['basic', '66666666-7777-8888-9999-000000000000', 'SECRET']);
   assert.ok(!String(tokenCall[2]).includes('SECRET'), 'secret must not be in the body');
@@ -193,9 +263,13 @@ t('cancelled leave disappears on the next sync', () => {
 });
 
 t('employee-triggered sync respects the interval; forced sync needs admin', () => {
+  const before = graphCalls.length;
   const r = call(ayse, 'POST', 'sync');
-  assert.strictEqual(r.body.ran, false);
+  assert.strictEqual(r.code, 200);
+  assert.strictEqual(r.body.phase, 'fresh');
+  assert.strictEqual(graphCalls.length, before, 'no Microsoft call when data is fresh');
   assert.strictEqual(call(ayse, 'POST', 'sync', { body: { force: true } }).code, 403);
+  assert.ok(!('lastSyncError' in call(ayse, 'GET', 'sync-status').body), 'employees get no error details');
 });
 
 t('calendar change: Saturday becomes a working day', () => {
@@ -211,15 +285,20 @@ t('e-mail autofilled into tenant ID gives a clear error', () => {
   settings.tenantId = 'someone@example.com';
   const r = call(admin, 'POST', 'admin-sync');
   settings.tenantId = saved;
-  assert.ok(/e-mail address/.test(r.body.error), r.body.error);
+  assert.strictEqual(r.body.phase, 'failed');
+  assert.ok(/e-mail address/.test(r.body.lastSyncError.message), JSON.stringify(r.body));
+  assert.ok(!r.body.lastSyncError.message.includes('someone@example.com'), 'no user input echoed back');
 });
 t('new hire inside Teams history is tracked from the hire date automatically', () => {
   const nova = mkUser('nova', 'Nova Yeni', 'nova@example.com');
-  call(admin, 'POST', 'admin-employee-save', { body: { login: 'nova', hireDate: '2025-10-13' } });
+  const iso = d => d.toISOString().slice(0, 10);
+  const hire = new Date(); hire.setUTCDate(hire.getUTCDate() - 300);
+  const hireIso = iso(hire);
+  call(admin, 'POST', 'admin-employee-save', { body: { login: 'nova', hireDate: hireIso } });
   const d = call(admin, 'GET', 'admin-employee', { query: { login: 'nova' } }).body;
-  assert.strictEqual(d.profile.trackFrom, '2025-10-13');
-  assert.strictEqual(d.balance.trackingStart, '2025-10-13');
-  assert.deepStrictEqual(d.periodStarts, ['2025-10-13', '2026-10-13']);
+  assert.strictEqual(d.profile.trackFrom, hireIso);
+  assert.strictEqual(d.balance.trackingStart, hireIso);
+  assert.strictEqual(d.periodStarts[0], hireIso);
 });
 
 t('admin can move the tracking start and set "remaining today"', () => {
@@ -289,6 +368,76 @@ t('admin can correct a single leave; it survives syncs and can be reset', () => 
   me = call(ayse, 'GET', 'me').body;
   assert.strictEqual(me.balance.current.usedHours, 8);
   assert.strictEqual(call(ayse, 'POST', 'admin-record-override', { body: { login: 'ayse', recId: 'T9', mode: 'exclude', note: 'x' } }).code, 403);
+});
+
+t('Microsoft sign-in error is reported with the AADSTS code only', () => {
+  graphData.tokenFails = true;
+  call(admin, 'POST', 'admin-sync');
+  graphData.tokenFails = false;
+  const st = call(admin, 'GET', 'sync-status').body;
+  assert.ok(/AADSTS7000215/.test(st.lastSyncError.message), st.lastSyncError.message);
+  assert.ok(!/Trace ID/.test(st.lastSyncError.message));
+  assert.strictEqual(st.phase, 'idle');
+});
+
+t('unmatched people are not looked up again on every sync', () => {
+  const lookups = () => graphCalls.filter(c => c[1].endsWith('/$batch') && /\/users\//.test(c[2])).length;
+  graphData.timesOff.push({ id: 'T20', userId: 'aad-stranger', isStagedForDeletion: false, sharedTimeOff: { startDateTime: '2026-11-03T06:00:00Z', endDateTime: '2026-11-03T10:00:00Z', timeOffReasonId: 'TOR_off' } });
+  graphData.users['aad-stranger'] = { id: 'aad-stranger', displayName: 'Stranger', mail: 'stranger@elsewhere.org' };
+  const a = lookups();
+  call(admin, 'POST', 'sync', { body: { force: true } });
+  assert.strictEqual(lookups(), a + 1, 'looked up once');
+  const cfg = JSON.parse(globalStorage.extensionProperties.leaveConfig);
+  cfg.lastSyncAt = null; globalStorage.extensionProperties.leaveConfig = JSON.stringify(cfg);
+  call(ayse, 'POST', 'sync'); // automatic refresh
+  assert.strictEqual(lookups(), a + 1, 'not looked up again by an automatic refresh');
+  assert.ok(call(admin, 'GET', 'admin-state').body.unmatched.some(u => u.email === 'stranger@elsewhere.org'));
+});
+
+t('many pages: paging across chains stays within the async limits and resumes', () => {
+  const extra = [];
+  for (let i = 0; i < 60; i++) {
+    extra.push({ id: 'P' + i, userId: 'aad-ayse', isStagedForDeletion: false, sharedTimeOff: { startDateTime: '2026-06-' + String(1 + (i % 28)).padStart(2, '0') + 'T06:00:00Z', endDateTime: '2026-06-' + String(1 + (i % 28)).padStart(2, '0') + 'T07:00:00Z', timeOffReasonId: 'TOR_sick' } });
+  }
+  const saved = graphData.timesOff;
+  graphData.timesOff = saved.concat(extra);
+  graphData.pageSize = 5; // 13 pages -> more than one chain
+  let r = call(admin, 'POST', 'admin-sync');
+  assert.strictEqual(r.code, 202);
+  let st = call(admin, 'GET', 'sync-status').body;
+  assert.strictEqual(st.phase, 'paused', JSON.stringify(st));
+  let guard = 0;
+  while (st.phase === 'paused' && guard++ < 5) { call(ayse, 'POST', 'sync'); st = call(admin, 'GET', 'sync-status').body; }
+  assert.strictEqual(st.phase, 'idle');
+  assert.strictEqual(st.lastSyncSummary.items, graphData.timesOff.filter(x => !x.isStagedForDeletion).length);
+  assert.strictEqual(JSON.parse(ayse.extensionProperties.leaveRecords).filter(x => /^P/.test(x.id)).length, 60);
+  graphData.timesOff = saved;
+  graphData.pageSize = 1000;
+  call(admin, 'POST', 'admin-sync');
+});
+
+t('throttled requests are retried; a running sync is not started twice', () => {
+  graphFaults.push({ url: /timesOff$/, status: 429, times: 1 });
+  call(admin, 'POST', 'admin-sync');
+  const st = call(admin, 'GET', 'sync-status').body;
+  assert.strictEqual(st.lastSyncError, null, JSON.stringify(st.lastSyncError));
+  // Simulate a sync that is still running: a second request must not start another one.
+  globalStorage.extensionProperties.leaveSync = JSON.stringify({ id: 'x', running: true, startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+  const before = graphCalls.length;
+  const r = call(admin, 'POST', 'admin-sync');
+  assert.strictEqual(r.body.phase, 'running');
+  assert.strictEqual(graphCalls.length, before);
+  globalStorage.extensionProperties.leaveSync = null;
+});
+
+t('a Graph permission error stops the sync with a clear message and keeps the data', () => {
+  const before = ayse.extensionProperties.leaveRecords;
+  graphFaults.push({ url: /timeOffReasons$/, status: 403, times: 1 });
+  call(admin, 'POST', 'admin-sync');
+  const st = call(admin, 'GET', 'sync-status').body;
+  assert.ok(/Schedule\.Read\.All/.test(st.lastSyncError.message), st.lastSyncError.message);
+  assert.strictEqual(ayse.extensionProperties.leaveRecords, before);
+  assert.strictEqual(globalStorage.extensionProperties.leaveSync, null);
 });
 
 console.log('\n' + passed + ' passed');

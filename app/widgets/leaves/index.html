@@ -338,8 +338,8 @@ try {
 
 // Refresh Teams data in the background when it is stale, then re-render.
 try {
-  const s = await LT.post('sync', {});
-  if (s && s.ran && !s.error && s.ok !== false) await load();
+  const s = await LT.syncAndWait('sync', {});
+  if (s.ran && !s.failed) await load();
 } catch (e) { /* the page still shows the last synced data */ }
 </script>
 </body>

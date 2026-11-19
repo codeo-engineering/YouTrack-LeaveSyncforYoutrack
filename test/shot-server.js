@@ -44,17 +44,14 @@ graph.timesOff.push(Object.assign(off('tdraft', AAD['owen.carter'], '2026-10-12'
 graph.users['aad-oliver'] = { mail: 'oliver.hayes@example.co.uk', displayName: 'Oliver Hayes' };
 graph.timesOff.push(off('tol', 'aad-oliver', '2026-09-07', 2, 'TOR_off'));
 unknownIds.forEach((id, k) => graph.timesOff.push(off('tu' + k, id, '2026-0' + (k + 3) + '-1' + k, 1, 'TOR_off')));
-const resp = (code, b) => ({ code, isSuccess: code < 400, response: JSON.stringify(b), json: () => b });
-class Connection {
-  constructor(b) { this.b = b; } basicAuth() { return this; } bearerAuth() { return this; } addHeader() { return this; }
-  postSync() { return resp(200, { access_token: 't' }); }
-  getSync(uri) {
-    if (uri.endsWith('/timeOffReasons')) return resp(200, { value: graph.reasons });
-    if (uri.endsWith('/timesOff')) return resp(200, { value: graph.timesOff });
-    const m = /^\/users\/(.+)$/.exec(uri); if (m) { const u = graph.users[decodeURIComponent(m[1])]; return u ? resp(200, u) : resp(404, {}); }
-    return resp(404, {});
-  }
-}
+const { Connection, run } = require('./async-http-mock')(function graphGet(url) {
+  const p = url.split('?')[0];
+  if (p.endsWith('/timeOffReasons')) return { status: 200, body: { value: graph.reasons } };
+  if (p.endsWith('/timesOff')) return { status: 200, body: { value: graph.timesOff } };
+  const m = /^\/users\/([^/?]+)$/.exec(p);
+  if (m) { const u = graph.users[decodeURIComponent(m[1])]; return u ? { status: 200, body: u } : { status: 404, body: {} }; }
+  return { status: 404, body: {} };
+});
 const orig = Module._resolveFilename;
 Module._resolveFilename = function (r, ...a) {
   if (r === '@jetbrains/youtrack-scripting-api/entities') return 'ME';
@@ -69,7 +66,7 @@ const settings = { tenantId: '11111111-2222-3333-4444-555555555555', clientId: '
 function call(login, method, p, body, query) {
   const ep = api.endpoints.find(e => e.method === method && e.path === p);
   const res = { code: 200, body: null, json(o) { this.body = o; } };
-  ep.handle({ currentUser: users[login], settings, globalStorage: gs, request: { json: () => body || {}, getParameter: n => (query || {})[n] ?? null }, response: res });
+  run(api, { currentUser: users[login], settings, globalStorage: gs }, c => ep.handle(Object.assign(c, { request: { json: () => body || {}, getParameter: n => (query || {})[n] ?? null }, response: res })));
   return res;
 }
 

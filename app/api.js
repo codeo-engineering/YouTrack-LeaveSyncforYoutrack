@@ -3,13 +3,17 @@
  *
  * Employee endpoints (any signed-in user, own data only):
  *   GET  api/me            balance, usage by type and history of the current user
- *   POST api/sync          refreshes Teams data if it is older than the sync interval
+ *   POST api/sync          starts a Teams refresh if the data is older than the sync interval (202, returns at once)
+ *   GET  api/sync-status   whether a Teams refresh is running (polled by the widgets)
  *
  * Admin endpoints (System Admin or member of the "Leave administrators" group from app settings):
  *   GET  api/admin-state, api/admin-employee?login=, api/admin-audit
  *   POST api/admin-employee-save, api/admin-employee-remove,
  *        api/admin-adjustment-add, api/admin-adjustment-remove,
  *        api/admin-config-save, api/admin-map-user, api/admin-sync
+ *
+ * Microsoft calls never run inside these handlers: teams-sync.js schedules them as async HTTP
+ * requests whose responses are handled by the asyncFunctions declared at the bottom of this file.
  */
 const engine = require('./engine');
 const store = require('./store');
@@ -51,8 +55,14 @@ function endpoint(method, path, fn) {
         const result = fn(ctx);
         ctx.response.json(result === undefined ? { ok: true } : result);
       } catch (e) {
-        ctx.response.code = e instanceof HttpError ? e.code : 500;
-        ctx.response.json({ ok: false, error: String(e && e.message || e) });
+        if (e instanceof HttpError) {
+          ctx.response.code = e.code;
+          ctx.response.json({ error: e.message });
+        } else {
+          console.error('Leave Sync: ' + method + ' ' + path + ' failed: ' + (e && e.stack || e));
+          ctx.response.code = 500;
+          ctx.response.json({ error: 'Something went wrong on the server. Try again; if it keeps happening, contact the app vendor.' });
+        }
       }
     }
   };
@@ -76,8 +86,12 @@ function userInfo(u) {
 }
 
 function syncStatus(ctx, cfg) {
+  const st = teams.status(ctx, cfg, true);
   return {
     configured: teams.isConfigured(ctx.settings),
+    phase: st.phase,
+    startedAt: st.startedAt,
+    progress: st.progress || null,
     lastSyncAt: cfg.lastSyncAt || null,
     lastSyncError: cfg.lastSyncError || null,
     lastSyncSummary: cfg.lastSyncSummary || null,
@@ -143,13 +157,23 @@ function me(ctx) {
   return Object.assign(base, { configured: balance.configured, balance: balance });
 }
 
+/** Starts a Teams refresh in the background. 202 when a refresh is running, 200 otherwise. */
+function startSync(ctx, force) {
+  const result = teams.start(ctx, { force: force });
+  if (result.phase === 'started' || result.phase === 'resumed' || result.phase === 'running') ctx.response.code = 202;
+  const cfg = store.getConfig(ctx);
+  return Object.assign({}, teams.status(ctx, cfg, isLeaveAdmin(ctx)), { phase: result.phase });
+}
+
 function sync(ctx) {
   const force = !!body(ctx).force;
   if (force) requireAdmin(ctx);
-  const result = teams.syncIfStale(ctx, force);
-  // Non-admins only learn whether data is fresh, never error details.
-  if (!isLeaveAdmin(ctx) && result.error) return { ran: true, ok: false };
-  return result;
+  return startSync(ctx, force);
+}
+
+function syncState(ctx) {
+  const cfg = store.getConfig(ctx);
+  return teams.status(ctx, cfg, isLeaveAdmin(ctx));
 }
 
 // ---------- admin endpoints ----------
@@ -478,7 +502,7 @@ function adminMapUser(ctx) {
 
 function adminSync(ctx) {
   requireAdmin(ctx);
-  return teams.syncIfStale(ctx, true);
+  return startSync(ctx, true);
 }
 
 function adminAudit(ctx) {
@@ -490,6 +514,7 @@ exports.httpHandler = {
   endpoints: [
     endpoint('GET', 'me', me),
     endpoint('POST', 'sync', sync),
+    endpoint('GET', 'sync-status', syncState),
     endpoint('GET', 'admin-state', adminState),
     endpoint('GET', 'admin-employee', adminEmployee),
     endpoint('GET', 'admin-audit', adminAudit),
@@ -502,5 +527,10 @@ exports.httpHandler = {
     endpoint('POST', 'admin-map-user', adminMapUser),
     endpoint('POST', 'admin-record-override', adminRecordOverride),
     endpoint('POST', 'admin-sync', adminSync)
-  ]
+  ],
+  // Responses of the asynchronous Microsoft requests scheduled by teams-sync.js.
+  asyncFunctions: {
+    onToken: function (ctx) { teams.asyncFunctions.onToken(ctx); },
+    onBatch: function (ctx) { teams.asyncFunctions.onBatch(ctx); }
+  }
 };

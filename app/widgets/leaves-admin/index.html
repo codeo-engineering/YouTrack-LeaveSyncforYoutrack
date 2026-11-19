@@ -179,7 +179,7 @@ function renderDetail() {
           trackFrom: b.configured ? (track.value || null) : undefined,
           openingDays: openingAuto.checked ? null : opening.value, openingConfirmed: confirmed.checked
         });
-        if (trackChanged) { try { await LT.post('admin-sync', {}); } catch (e) { /* shown on the Teams tab */ } }
+        if (trackChanged) { try { await LT.syncAndWait('admin-sync', {}); } catch (e) { /* shown on the Teams tab */ } }
         await refresh(true);
       }, 'Saved') }, 'Save profile'))
   );
@@ -388,7 +388,7 @@ async function openAddEmployee() {
           if (!chosen) throw new Error('Choose a person');
           if (!hire.value) throw new Error('Enter the hire date');
           await LT.post('admin-employee-save', { login: chosen, hireDate: hire.value, birthDate: birth.value || null });
-          if (S.data.sync.configured) { try { await LT.post('admin-sync', {}); } catch (e) { /* shown on the Teams tab */ } }
+          if (S.data.sync.configured) { try { await LT.syncAndWait('admin-sync', {}); } catch (e) { /* shown on the Teams tab */ } }
           S.modal = null; S.selected = chosen;
           await refresh(true);
         }, 'Employee added') }, 'Add'))));
@@ -567,13 +567,14 @@ function renderTeams(root) {
   const useDrafts = h('input', { type: 'checkbox', checked: s.useDrafts !== false });
   useDrafts.addEventListener('change', () => act(async () => {
     await LT.post('admin-config-save', { useDrafts: useDrafts.checked });
-    await LT.post('admin-sync', {});
+    await LT.syncAndWait('admin-sync', {});
     await refresh(!!S.selected);
   }, 'Saved – leave re-read from Teams'));
   const statusCard = h('div', { class: 'card' },
     h('h2', null, 'Microsoft Teams Shifts'),
     s.configured
       ? h('div', null,
+          s.phase === 'running' || s.phase === 'paused' ? h('div', { class: 'notice small', style: { margin: '0 0 8px' } }, 'A sync with Microsoft Teams is running in the background' + (s.progress ? ' (' + s.progress.items + ' leave items read so far)' : '') + '.') : null,
           h('p', null, 'Last sync: ', h('b', null, LT.ago(s.lastSyncAt)),
             s.lastSyncSummary ? h('span', { class: 'muted small' }, ' · ' + s.lastSyncSummary.items + ' leave items since ' + LT.date(s.lastSyncSummary.since) + ', ' + s.lastSyncSummary.updatedUsers + ' people updated') : null),
           s.lastSyncError ? h('div', { class: 'notice bad', style: { margin: '8px 0' } }, s.lastSyncError.message) : null,
@@ -587,7 +588,7 @@ function renderTeams(root) {
             h('button', { class: 'primary', onclick: async (ev) => {
               ev.target.disabled = true; ev.target.textContent = 'Syncing…';
               try {
-                const r = await LT.post('admin-sync', {});
+                const r = await LT.syncAndWait('admin-sync', {});
                 if (r.error) LT.toast('Sync failed: ' + r.error, true); else LT.toast('Sync finished');
                 await refresh(!!S.selected);
               } catch (e) { LT.toast(e.message, true); ev.target.disabled = false; ev.target.textContent = 'Sync now'; }
@@ -662,7 +663,7 @@ try {
   await loadState();
   render();
   if (S.data.sync.configured) {
-    LT.post('sync', {}).then(r => { if (r && r.ran) refresh(!!S.selected); }).catch(() => {});
+    LT.syncAndWait('sync', {}).then(r => { if (r && r.ran) refresh(!!S.selected); }).catch(() => {});
   }
 } catch (e) {
   clear(app).appendChild(h('div', { class: 'notice bad' }, 'Could not load Leave Management: ' + e.message));

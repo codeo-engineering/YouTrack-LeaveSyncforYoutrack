@@ -12,7 +12,8 @@
       "entityType": "AppGlobalStorage",
       "properties": {
         "leaveConfig": { "type": "string" },
-        "leaveAudit": { "type": "string" }
+        "leaveAudit": { "type": "string" },
+        "leaveSync": { "type": "string" }
       }
     }
   ]

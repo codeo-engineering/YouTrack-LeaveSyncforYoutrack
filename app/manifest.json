@@ -3,10 +3,12 @@
   "name": "leave-tracker",
   "title": "Leave Sync for YouTrack",
   "description": "Syncs approved time off from Microsoft Teams Shifts. Every employee sees their own leave balance, usage by type and history; admins see the whole team and manage hire dates, entitlements and holidays.",
-  "version": "1.2.0",
+  "version": "1.3.0",
+  "minYouTrackVersion": "2026.2",
   "icon": "icon.svg",
   "vendor": {
-    "name": "Internal"
+    "name": "Codeo Engineering",
+    "url": "https://codeo.com.tr"
   },
   "widgets": [
     {

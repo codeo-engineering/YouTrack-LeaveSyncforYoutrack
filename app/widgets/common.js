@@ -95,6 +95,27 @@
   LT.get = function (path, query) { return LT.api(path, query ? { query: query } : {}); };
   LT.post = function (path, body) { return LT.api(path, { method: 'POST', body: body || {} }); };
 
+  /**
+   * Starts a Teams refresh and waits until it has finished. The backend answers at once and talks to
+   * Microsoft in the background, so this polls api/sync-status. A refresh that paused at the
+   * async-step limit (very large teams) is resumed automatically.
+   * Resolves to the last status, with ran = true when a refresh actually took place.
+   */
+  LT.syncAndWait = async function (path, body) {
+    const busy = function (p) { return p === 'started' || p === 'resumed' || p === 'running'; };
+    let r = await LT.post(path, body);
+    const ran = busy(r && r.phase) || (r && r.phase === 'paused');
+    const until = Date.now() + 3 * 60000;
+    let resumes = 0;
+    while (r && Date.now() < until) {
+      if (r.phase === 'paused' && resumes < 20) { resumes++; r = await LT.post('sync', {}); continue; }
+      if (!busy(r.phase)) break;
+      await new Promise(function (res) { setTimeout(res, 2000); });
+      r = await LT.get('sync-status');
+    }
+    return Object.assign({}, r, { ran: !!ran });
+  };
+
   // ---- toast ----
   let toastTimer = null;
   LT.toast = function (msg, isError) {

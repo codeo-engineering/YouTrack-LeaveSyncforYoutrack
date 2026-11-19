@@ -78,11 +78,13 @@ Microsoft Teams Shifts ──(Microsoft Graph, read-only)──► YouTrack app 
 4. Leave is stored only for employees an administrator has added, then counted per local working day.
 5. Data refreshes when someone opens Leaves and it is older than the refresh interval (default 30 minutes), or when an administrator clicks **Sync now**.
 
+All Microsoft requests are **asynchronous**: the endpoint that starts a sync answers immediately, and the work continues in YouTrack async functions (`onToken`, `onBatch`). Graph requests are grouped with JSON batching (up to 20 per call), Teams users that can't be matched are looked up at most once a week, and very large schedules continue in a follow-up chain. The widgets poll `api/sync-status` and re-render when the sync is done.
+
 ---
 
 ## Requirements
 
-- YouTrack (Cloud or Server) with permission to install apps
+- YouTrack 2026.2 or later (Cloud or Server) with permission to install apps
 - A Microsoft 365 administrator who can register an app and grant admin consent (Global Administrator or Privileged Role Administrator)
 - A team in Microsoft Teams that uses **Shifts** for time-off requests
 - For each employee: hire date, optional birth date, and how many leave days they have left today
@@ -229,6 +231,7 @@ The defaults follow Turkish labour law; all values can be changed by an administ
 - Data is stored inside your YouTrack instance (entity extension properties on users and app global storage). Nothing is sent to third parties.
 - Access checks run on the server: employees only receive their own data; only System Administrators and members of the *Leave administrators* group can see other people's leave or change anything.
 - The client secret is stored as a secret app setting and is never returned to the browser.
+- Full details: [Privacy Policy](PRIVACY.md).
 
 ---
 
@@ -240,7 +243,7 @@ The defaults follow Turkish labour law; all values can be changed by an administ
 | `app/settings.json` | App settings: tenant ID, client ID, client secret, team IDs, leave administrators group |
 | `app/entity-extensions.json` | Stored data: `User.leaveEnabled`, `User.leaveProfile`, `User.leaveRecords`, `AppGlobalStorage.leaveConfig`, `AppGlobalStorage.leaveAudit` |
 | `app/engine.js` | Leave calculation – pure functions with no YouTrack dependency (leave years, entitlement, carry-over, holidays, time zones, overrides) |
-| `app/teams-sync.js` | Microsoft Graph client: token, time-off reasons, time off (incl. unshared schedule changes), user matching |
+| `app/teams-sync.js` | Asynchronous Microsoft Graph sync: token, batched requests for time-off reasons, time off (incl. unshared schedule changes) and user matching |
 | `app/api.js` | HTTP endpoints used by the widgets (employee and admin endpoints) |
 | `app/store.js` | Reading and writing stored data, change history |
 | `app/widgets/leaves/` | **Leaves** main menu page |
@@ -250,6 +253,7 @@ The defaults follow Turkish labour law; all values can be changed by an administ
 | `test/engine.test.js` | Unit tests for the calculation engine |
 | `test/api.test.js` | API tests with mocked YouTrack entities and Microsoft Graph |
 | `test/preview-server.js`, `test/shot-server.js` | Local preview servers with sample data |
+| `test/async-http-mock.js` | Async HTTP mock used by the preview servers |
 | `docs/images/` | Screenshots used in this README (sample data only) |
 
 ---
@@ -288,12 +292,13 @@ Upload the new zip over the existing app in **Administration → Apps**. **Do no
 
 ## Roadmap
 
-Planned for the JetBrains Marketplace release (v2.0.0):
-- Asynchronous Microsoft Graph requests and `minYouTrackVersion` 2026.2
-- Explicit HTTP status codes and sanitized error messages
+Done in 1.3.0: asynchronous Microsoft requests, `minYouTrackVersion` 2026.2, privacy policy.
+
+Planned:
 - UI follows the YouTrack theme only (no separate theme toggle)
 - `ADMIN_UPDATE_APP` permission for app-wide settings
-- Input size limits and a 40×40 SVG logo
+- Input size limits
+- Optional German-style entitlement (full leave from the first year)
 
 ---
 
