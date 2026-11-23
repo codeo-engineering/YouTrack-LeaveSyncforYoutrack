@@ -306,7 +306,7 @@ Upload the new zip over the existing app in **Administration → Apps**. **Do no
 
 ## Roadmap
 
-Done in 1.4.0: asynchronous Microsoft requests, `minYouTrackVersion` 2026.2, privacy policy, demo mode, holidays entered by hand, country-neutral defaults.
+Done in 1.4.0: asynchronous Microsoft requests, `minYouTrackVersion` 2026.2.0, privacy policy, demo mode, holidays entered by hand, country-neutral defaults.
 
 Planned:
 - UI follows the YouTrack theme only (no separate theme toggle)
