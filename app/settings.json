@@ -7,7 +7,7 @@
     "demoMode": {
       "type": "boolean",
       "title": "Use demo data (no Microsoft connection)",
-      "description": "Try the app without Microsoft 365: sample Teams Shifts time off is generated for the employees you add. The Microsoft settings below are ignored while this is on. Turn it off to sync real data; demo leave is then replaced by your Teams data.",
+      "description": "Try the app without Microsoft 365: sample Teams Shifts time off is generated for the employees you add. The Microsoft settings below are ignored while this is on. Your real leave, links and leave types are kept and only hidden while this is on. Turn it off to go back to them.",
       "x-scope": "GLOBAL"
     },
     "tenantId": {

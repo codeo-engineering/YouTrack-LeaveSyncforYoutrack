@@ -481,13 +481,13 @@ function finish(ctx, st) {
   const nowIso = new Date().toISOString();
   const demoRun = !!st.demo;
 
-  // Switching between demo data and Microsoft Teams: forget the other mode's people and reasons.
-  [cfg.userMap, cfg.unmatched].forEach(function (map) {
-    Object.keys(map).forEach(function (id) { if (demo.isDemoId(id) !== demoRun) delete map[id]; });
-  });
-  Object.keys(cfg.reasons).forEach(function (id) {
-    if (demo.isDemoId(id) !== demoRun && !(id in st.reasons)) delete cfg.reasons[id];
-  });
+  // Demo mode never touches real data: real people, links and leave types are kept as they are
+  // (the API simply hides them while demo mode is on). A real sync removes everything from demo mode.
+  if (!demoRun) {
+    [cfg.userMap, cfg.unmatched, cfg.reasons].forEach(function (map) {
+      Object.keys(map).forEach(function (id) { if (demo.isDemoId(id)) delete map[id]; });
+    });
+  }
 
   Object.keys(st.reasons).forEach(function (id) {
     const r = st.reasons[id];
@@ -537,8 +537,12 @@ function finish(ctx, st) {
   store.listEmployees().forEach(function (u) {
     const fresh = byLogin[u.login] || [];
     const old = store.getRecords(u);
-    // Older real history is never touched; demo records are removed as soon as real data is synced.
-    const kept = old.filter(function (r) { return String(r.start).slice(0, 10) < st.since && (demoRun || !r.demo); });
+    // Demo run: real records are all kept (hidden while demo mode is on); only demo records are replaced.
+    // Real run: demo records are removed; real records before the window are kept.
+    const kept = old.filter(function (r) {
+      const before = String(r.start).slice(0, 10) < st.since;
+      return demoRun ? (!r.demo || before) : (!r.demo && before);
+    });
     const merged = kept.concat(fresh).sort(function (a, b) { return a.start < b.start ? -1 : 1; });
     if (JSON.stringify(merged) !== JSON.stringify(old)) {
       store.saveRecords(u, merged);

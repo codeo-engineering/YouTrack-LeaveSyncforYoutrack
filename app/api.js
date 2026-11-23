@@ -18,6 +18,7 @@
 const engine = require('./engine');
 const store = require('./store');
 const teams = require('./teams-sync');
+const demo = require('./demo-data');
 
 // ---------- helpers ----------
 
@@ -101,16 +102,37 @@ function syncStatus(ctx, cfg) {
   };
 }
 
-function reasonList(cfg) {
-  return Object.keys(cfg.reasons || {}).map(function (id) {
+/**
+ * Leave records of the current mode. Demo mode keeps real records untouched and only shows demo
+ * records; with demo mode off, demo records are ignored (and removed by the next sync).
+ */
+function recordsOf(ctx, u) {
+  const demoOn = teams.isDemo(ctx.settings);
+  return store.getRecords(u).filter(function (r) { return !r.demo === !demoOn; });
+}
+
+/** Keys of a Teams-ID map (people, leave types) that belong to the current mode. */
+function sameMode(ctx, id) {
+  return demo.isDemoId(id) === teams.isDemo(ctx.settings);
+}
+
+function pick(ctx, map) {
+  const out = {};
+  Object.keys(map || {}).forEach(function (id) { if (sameMode(ctx, id)) out[id] = map[id]; });
+  return out;
+}
+
+function reasonList(cfg, ctx) {
+  const reasons = ctx ? pick(ctx, cfg.reasons) : (cfg.reasons || {});
+  return Object.keys(reasons).map(function (id) {
     const r = cfg.reasons[id];
     return { id: id, name: r.name, deducts: !!r.deducts, reviewed: !!r.reviewed, active: r.active !== false };
   }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
 }
 
-function employeeSummary(u, cfg, today) {
+function employeeSummary(ctx, u, cfg, today) {
   const profile = store.getProfile(u);
-  const b = engine.computeBalance(profile, store.getRecords(u), cfg, today);
+  const b = engine.computeBalance(profile, recordsOf(ctx, u), cfg, today);
   const info = userInfo(u);
   if (!b.configured) return Object.assign(info, { configured: false });
   return Object.assign(info, {
@@ -154,7 +176,7 @@ function me(ctx) {
   };
   if (!store.isEnabled(u)) return Object.assign(base, { configured: false });
   const profile = store.getProfile(u);
-  const balance = engine.computeBalance(profile, store.getRecords(u), cfg, engine.todayIso(cfg));
+  const balance = engine.computeBalance(profile, recordsOf(ctx, u), cfg, engine.todayIso(cfg));
   return Object.assign(base, { configured: balance.configured, balance: balance });
 }
 
@@ -183,12 +205,12 @@ function adminState(ctx) {
   requireAdmin(ctx);
   const cfg = store.getConfig(ctx);
   const today = engine.todayIso(cfg);
-  const employees = store.listEmployees().map(function (u) { return employeeSummary(u, cfg, today); })
+  const employees = store.listEmployees().map(function (u) { return employeeSummary(ctx, u, cfg, today); })
     .sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
   return {
     today: today,
     employees: employees,
-    reasons: reasonList(cfg),
+    reasons: reasonList(cfg, ctx),
     calendar: {
       workdayHours: cfg.workdayHours,
       weekendDays: cfg.weekendDays,
@@ -206,8 +228,8 @@ function adminState(ctx) {
     tiers: cfg.tiers,
     ageRule: cfg.ageRule,
     sync: syncStatus(ctx, cfg),
-    unmatched: Object.keys(cfg.unmatched || {}).map(function (id) { return Object.assign({ aadId: id }, cfg.unmatched[id]); }),
-    userMap: cfg.userMap || {}
+    unmatched: Object.keys(pick(ctx, cfg.unmatched)).map(function (id) { return Object.assign({ aadId: id }, cfg.unmatched[id]); }),
+    userMap: pick(ctx, cfg.userMap)
   };
 }
 
@@ -216,7 +238,7 @@ function adminOverview(ctx) {
   const cfg = store.getConfig(ctx);
   const today = engine.todayIso(cfg);
   const employees = store.listEmployees().map(function (u) {
-    const b = engine.computeBalance(store.getProfile(u), store.getRecords(u), cfg, today);
+    const b = engine.computeBalance(store.getProfile(u), recordsOf(ctx, u), cfg, today);
     const info = userInfo(u);
     if (!b.configured) return Object.assign(info, { configured: false });
     const c = b.current;
@@ -245,7 +267,7 @@ function adminEmployee(ctx) {
     profile: profile,
     periodStarts: profile.hireDate ? engine.periodStarts(profile.hireDate, today) : [],
     historyFrom: engine.addDays(today, -SYNC_HISTORY_DAYS),
-    balance: engine.computeBalance(profile, store.getRecords(u), cfg, today)
+    balance: engine.computeBalance(profile, recordsOf(ctx, u), cfg, today)
   };
 }
 
@@ -286,7 +308,7 @@ function adminEmployeeSave(ctx) {
   p.adjustments = p.adjustments || [];
   if (b.remainingToday !== undefined && b.remainingToday !== null && b.remainingToday !== '') {
     const target = optNumber(b.remainingToday, 'Remaining today');
-    const opening = engine.openingForRemainingOn(p, store.getRecords(u), cfg, today, target);
+    const opening = engine.openingForRemainingOn(p, recordsOf(ctx, u), cfg, today, target);
     if (opening === null) throw new HttpError(400, 'The first leave year has not started yet for this hire date');
     p.openingDays = opening;
     p.openingConfirmed = true;
@@ -360,7 +382,7 @@ function adminRecordOverride(ctx) {
   const b = body(ctx);
   const u = getEmployeeOr404(b.login);
   if (!b.recId) throw new HttpError(400, 'Leave record is missing');
-  const rec = store.getRecords(u).filter(function (r) { return r.id === b.recId; })[0];
+  const rec = recordsOf(ctx, u).filter(function (r) { return r.id === b.recId; })[0];
   if (!rec) throw new HttpError(404, 'Leave record not found – run a sync and try again');
   const cfg = store.getConfig(ctx);
   const p = store.getProfile(u);

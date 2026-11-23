@@ -111,7 +111,7 @@ No Microsoft 365 tenant yet? In the app settings tick **Use demo data (no Micros
 - a request a manager shortened without sharing it yet;
 - a deleted request that is not counted.
 
-The sample data goes through the same sync and calculation code as real data, including e-mail matching and two Teams people who can't be matched automatically. Microsoft is never contacted. Untick the setting to sync real data: demo leave is then replaced by your Teams data, while employees, hire dates and settings are kept.
+The sample data goes through the same sync and calculation code as real data, including e-mail matching and two Teams people who can't be matched automatically. Microsoft is never contacted. Untick the setting to go back to real data. Demo mode deletes nothing: real leave, linked people and leave-type choices are only hidden while it is on. While it is on, everyone sees demo data on the Leaves page, so try it on a test instance if the app is already in use.
 
 ---
 

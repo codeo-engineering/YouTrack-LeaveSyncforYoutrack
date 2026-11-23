@@ -445,6 +445,12 @@ t('demo mode: sample data without any Microsoft call', () => {
   const recs = JSON.parse(ayse.extensionProperties.leaveRecords);
   recs.unshift({ id: 'OLD1', start: '2020-02-03T06:00:00Z', end: '2020-02-03T14:00:00Z', reasonId: 'TOR_off' });
   ayse.extensionProperties.leaveRecords = JSON.stringify(recs);
+  // Real setup that must survive demo mode: a manual link and a leave-type choice.
+  call(admin, 'POST', 'admin-map-user', { body: { aadId: 'aad-manual-link', login: 'ayse' } });
+  const cfg0 = JSON.parse(globalStorage.extensionProperties.leaveConfig);
+  const realReasons = JSON.stringify(cfg0.reasons);
+  const realRecords = JSON.parse(ayse.extensionProperties.leaveRecords).map(x => x.id).sort();
+  global.__realSetup = { realReasons, realRecords };
   const before = graphCalls.length;
   settings.demoMode = true;
   const r = call(admin, 'POST', 'admin-sync');
@@ -454,6 +460,10 @@ t('demo mode: sample data without any Microsoft call', () => {
   assert.strictEqual(graphCalls.length, before, 'no Microsoft call in demo mode');
   const mine = JSON.parse(ayse.extensionProperties.leaveRecords);
   assert.ok(mine.some(x => x.id === 'OLD1'), 'older real history kept');
+  assert.deepStrictEqual(mine.filter(x => !x.demo).map(x => x.id).sort(), global.__realSetup.realRecords, 'every real record kept in storage');
+  const cfgDemo = JSON.parse(globalStorage.extensionProperties.leaveConfig);
+  assert.strictEqual(cfgDemo.userMap['aad-manual-link'], 'ayse', 'manual link kept');
+  Object.keys(JSON.parse(global.__realSetup.realReasons)).forEach(id => assert.ok(cfgDemo.reasons[id], 'real leave type kept: ' + id));
   const demoRecs = mine.filter(x => x.demo);
   assert.ok(demoRecs.length >= 7, String(demoRecs.length));
   assert.ok(!demoRecs.some(x => x.note === 'Cancelled'), 'staged deletion ignored');
@@ -464,9 +474,12 @@ t('demo mode: sample data without any Microsoft call', () => {
   assert.ok(state.reasons.some(x => x.name === 'Vacation' && x.deducts), 'Vacation counts as annual leave in demo mode');
   assert.ok(state.reasons.some(x => x.name === 'Sick' && !x.deducts));
   assert.ok(state.unmatched.some(u => u.email === 'jordan.rivers@demo.invalid'), JSON.stringify(state.unmatched));
+  assert.ok(!state.reasons.some(x => !/^demo-/.test(x.id)), 'real leave types hidden in demo mode');
+  assert.ok(!Object.keys(state.userMap).some(id => !/^demo-/.test(id)), 'real links hidden in demo mode');
   const me = call(ayse, 'GET', 'me').body;
   assert.strictEqual(me.sync.demo, true);
   assert.ok(me.balance.configured);
+  assert.ok(me.balance.records.every(x => /^demo-/.test(x.id)), 'only demo leave shown');
   assert.ok(!globalStorage.extensionProperties.leaveSync);
 });
 
@@ -479,6 +492,11 @@ t('turning demo mode off replaces demo data with Teams data', () => {
   assert.ok(mine.some(x => x.id === 'OLD1'));
   const state = call(admin, 'GET', 'admin-state').body;
   assert.strictEqual(state.sync.demo, false);
+  const cfg1 = JSON.parse(globalStorage.extensionProperties.leaveConfig);
+  const reasons0 = JSON.parse(global.__realSetup.realReasons);
+  Object.keys(reasons0).forEach(id => assert.strictEqual(cfg1.reasons[id].deducts, reasons0[id].deducts, 'leave-type choice unchanged: ' + id));
+  assert.strictEqual(cfg1.userMap['aad-manual-link'], 'ayse', 'manual link still there');
+  assert.ok(!Object.keys(cfg1.userMap).some(id => /^demo-/.test(id)), 'demo links removed');
   assert.ok(!state.reasons.some(x => /^demo-/.test(x.id)), 'demo reasons removed');
   assert.ok(!state.unmatched.some(u => /demo/.test(u.email || '')), 'demo people removed');
 });
