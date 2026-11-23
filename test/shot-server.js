@@ -62,7 +62,7 @@ require.cache.ME = { id: 'ME', filename: 'ME', loaded: true, exports: entitiesMo
 require.cache.MH = { id: 'MH', filename: 'MH', loaded: true, exports: { Connection } };
 const api = require(path.join(APP, 'api.js')).httpHandler;
 const gs = { extensionProperties: {} };
-const settings = { tenantId: '11111111-2222-3333-4444-555555555555', clientId: '66666666-7777-8888-9999-000000000000', clientSecret: 's', teamIds: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' };
+const settings = { tenantId: '11111111-2222-3333-4444-555555555555', clientId: '66666666-7777-8888-9999-000000000000', clientSecret: 's', teamIds: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', demoMode: !!process.env.DEMO };
 function call(login, method, p, body, query) {
   const ep = api.endpoints.find(e => e.method === method && e.path === p);
   const res = { code: 200, body: null, json(o) { this.body = o; } };

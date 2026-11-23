@@ -99,12 +99,13 @@
    * Starts a Teams refresh and waits until it has finished. The backend answers at once and talks to
    * Microsoft in the background, so this polls api/sync-status. A refresh that paused at the
    * async-step limit (very large teams) is resumed automatically.
+   * In demo mode the refresh finishes inside the request (phase 'done').
    * Resolves to the last status, with ran = true when a refresh actually took place.
    */
   LT.syncAndWait = async function (path, body) {
     const busy = function (p) { return p === 'started' || p === 'resumed' || p === 'running'; };
     let r = await LT.post(path, body);
-    const ran = busy(r && r.phase) || (r && r.phase === 'paused');
+    const ran = busy(r && r.phase) || (r && (r.phase === 'paused' || r.phase === 'done'));
     const until = Date.now() + 3 * 60000;
     let resumes = 0;
     while (r && Date.now() < until) {

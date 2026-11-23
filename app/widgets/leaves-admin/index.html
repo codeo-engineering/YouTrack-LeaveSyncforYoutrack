@@ -58,7 +58,10 @@ function render() {
     LT.themeToggle()
   ));
 
-  if (!d.sync.configured) {
+  if (d.sync.demo) {
+    app.appendChild(h('div', { class: 'notice warn', style: { marginBottom: '16px' } }, h('b', null, 'Demo mode is on. '),
+      'Leave is sample data generated for the employees you add; Microsoft is not contacted. Turn off "Use demo data" in the app settings (Administration → Apps → Leave Sync for YouTrack → Settings) to sync real Teams data.'));
+  } else if (!d.sync.configured) {
     app.appendChild(h('div', { class: 'notice warn', style: { marginBottom: '16px' } },
       'Teams is not connected yet. You can already add employees; leave will appear after you fill in the app settings (see the Teams connection tab).'));
   } else if (d.sync.lastSyncError) {
@@ -571,7 +574,7 @@ function renderTeams(root) {
     await refresh(!!S.selected);
   }, 'Saved – leave re-read from Teams'));
   const statusCard = h('div', { class: 'card' },
-    h('h2', null, 'Microsoft Teams Shifts'),
+    h('h2', null, 'Microsoft Teams Shifts' + (s.demo ? ' (demo data)' : '')),
     s.configured
       ? h('div', null,
           s.phase === 'running' || s.phase === 'paused' ? h('div', { class: 'notice small', style: { margin: '0 0 8px' } }, 'A sync with Microsoft Teams is running in the background' + (s.progress ? ' (' + s.progress.items + ' leave items read so far)' : '') + '.') : null,

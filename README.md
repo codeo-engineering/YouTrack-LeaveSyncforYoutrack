@@ -14,6 +14,7 @@ Every employee gets a **Leaves** page in the YouTrack main menu with their own r
 - [How it works](#how-it-works)
 - [Requirements](#requirements)
 - [Installation](#installation)
+  - [Try it with demo data](#try-it-with-demo-data)
 - [Connecting Microsoft Teams](#connecting-microsoft-teams)
 - [Configuring leave](#configuring-leave)
 - [Calculation rules](#calculation-rules)
@@ -100,6 +101,18 @@ All Microsoft requests are **asynchronous**: the endpoint that starts a sync ans
 2. In YouTrack go to **Administration → Apps → Add app → Upload ZIP file** and select the zip.
 3. Make sure the app is **Active** and its visibility allows all users, so everyone sees the **Leaves** menu item.
 
+### Try it with demo data
+
+No Microsoft 365 tenant yet? In the app settings tick **Use demo data (no Microsoft connection)**, add a few employees on the **Employees** tab and open **Leaves**. The app generates sample Teams Shifts time off for every employee you add, relative to today:
+- vacations, one of them spanning a weekend;
+- a half day and an hourly sick leave;
+- leave around New Year's Day, which is a public holiday;
+- upcoming leave;
+- a request a manager shortened without sharing it yet;
+- a deleted request that is not counted.
+
+The sample data goes through the same sync and calculation code as real data, including e-mail matching and two Teams people who can't be matched automatically. Microsoft is never contacted. Untick the setting to sync real data: demo leave is then replaced by your Teams data, while employees, hire dates and settings are kept.
+
 ---
 
 ## Connecting Microsoft Teams
@@ -138,6 +151,7 @@ In **Administration → Apps → Leave Sync for YouTrack → Settings**:
 
 | Field | Value |
 |---|---|
+| Use demo data | leave unticked for real data (see [Try it with demo data](#try-it-with-demo-data)) |
 | Microsoft Entra tenant ID | Directory (tenant) ID from step 1 |
 | Application (client) ID | from step 1 |
 | Client secret | secret **Value** from step 3 |
@@ -243,6 +257,7 @@ The defaults follow Turkish labour law; all values can be changed by an administ
 | `app/settings.json` | App settings: tenant ID, client ID, client secret, team IDs, leave administrators group |
 | `app/entity-extensions.json` | Stored data: `User.leaveEnabled`, `User.leaveProfile`, `User.leaveRecords`, `AppGlobalStorage.leaveConfig`, `AppGlobalStorage.leaveAudit` |
 | `app/engine.js` | Leave calculation – pure functions with no YouTrack dependency (leave years, entitlement, carry-over, holidays, time zones, overrides) |
+| `app/demo-data.js` | Sample Teams Shifts data for demo mode, shaped like Microsoft Graph responses |
 | `app/teams-sync.js` | Asynchronous Microsoft Graph sync: token, batched requests for time-off reasons, time off (incl. unshared schedule changes) and user matching |
 | `app/api.js` | HTTP endpoints used by the widgets (employee and admin endpoints) |
 | `app/store.js` | Reading and writing stored data, change history |
@@ -293,6 +308,7 @@ Upload the new zip over the existing app in **Administration → Apps**. **Do no
 ## Roadmap
 
 Done in 1.3.0: asynchronous Microsoft requests, `minYouTrackVersion` 2026.2, privacy policy.
+Done in 1.3.1: demo mode (try the app without Microsoft 365).
 
 Planned:
 - UI follows the YouTrack theme only (no separate theme toggle)

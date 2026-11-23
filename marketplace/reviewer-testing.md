@@ -1,6 +1,30 @@
 # Testing Leave Sync for YouTrack without your own Teams Shifts account
 
-Leave Sync for YouTrack reads time off from Microsoft Teams Shifts through Microsoft Graph. To test the sync end to end you need a Microsoft 365 tenant where Teams and Shifts are available. We can't share access to our own tenant, because the app's Microsoft Graph permissions would give access to our company's real schedules. Below are two ways to get a test tenant, and a way to check the UI without Microsoft 365.
+Leave Sync for YouTrack reads time off from Microsoft Teams Shifts through Microsoft Graph. To test the sync end to end you need a Microsoft 365 tenant where Teams and Shifts are available. We can't share access to our own tenant, because the app's Microsoft Graph permissions would give access to our company's real schedules.
+
+The quickest way to review the app is its **demo mode**, which needs no Microsoft account. To test the real Microsoft connection as well, use one of the test tenants below.
+
+## Demo mode: no Microsoft account needed (recommended)
+
+1. Install the app. In **Administration → Apps → Leave Sync for YouTrack → Settings**, tick **Use demo data (no Microsoft connection)** and save. Leave the Microsoft fields empty.
+2. In **Administration → Integrations → Leave Management → Employees**, add two or three users with hire dates. Use different hire dates, for example 2 years and 8 years ago, to see different entitlements.
+3. Open **Leaves** in the main menu as each of these users and as the administrator.
+
+For every employee you add, the app generates sample Teams Shifts time off relative to today:
+- a vacation week spanning a weekend;
+- three vacation days;
+- leave around New Year's Day;
+- a half day and a two-hour sick leave;
+- two sick days;
+- an upcoming vacation;
+- a request shortened by the manager from 3 days to 1 without sharing;
+- a request deleted in the schedule.
+
+The data is shaped exactly like Microsoft Graph responses and goes through the same sync, matching and calculation code as real data. Only the HTTP transport is replaced: no request leaves YouTrack.
+
+**Teams connection** also lists two Teams people who can't be matched, so **Link** and **Unlink** can be tested. *Vacation* starts as annual leave; you can change this on **Leave types**.
+
+The asynchronous Microsoft requests (`onToken`, `onBatch` in `app/teams-sync.js`) only run with a real tenant (options below). Their logic is covered by `test/api.test.js`, which simulates YouTrack's async chain limits.
 
 ## Option 1: A Microsoft 365 trial
 
@@ -23,12 +47,12 @@ Microsoft offers a one-month free trial of Microsoft 365 Business Basic, Standar
 
 Organizations that qualify for the Microsoft 365 Developer Program sandbox, such as Visual Studio Professional or Enterprise subscribers and some partner programs, can create a free Microsoft 365 E5 developer subscription. Teams and Shifts are included. Then continue with steps 2–7 of Option 1.
 
-## Checking the UI without Microsoft 365
+## Local preview without YouTrack
 
-The repository contains a preview server with sample data. It runs the app's real backend code with a mocked Microsoft Graph:
+The repository also contains a preview server with sample data. It runs the app's backend code with a mocked YouTrack and Microsoft Graph:
 
 ```sh
-node test/shot-server.js
+node test/shot-server.js            # or DEMO=1 node test/shot-server.js for demo mode
 # open http://localhost:8765/leaves/index.html?as=chloe.adams        (employee)
 # open http://localhost:8765/leaves-admin/index.html?as=isabel.turner (administrator)
 ```
@@ -38,6 +62,8 @@ node test/shot-server.js
 | Scenario | Expected result |
 |---|---|
 | **Sync now** on Teams connection | Returns at once; *Last sync: just now* with the number of leave items |
+| Demo mode on, add an employee | Sample leave appears immediately; a *Demo data* notice is shown on both pages |
+| Demo mode off, then **Sync now** with a real tenant | Demo leave, demo people and demo leave types are replaced by Teams data |
 | Employee opens **Leaves** | Sees only their own balance, usage by type and history |
 | Admin opens **Leaves → View → Team overview** | Sees every tracked employee |
 | Leave types: tick *Vacation* as annual leave | Vacation days are deducted; other types are only counted |

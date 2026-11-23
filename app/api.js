@@ -89,6 +89,7 @@ function syncStatus(ctx, cfg) {
   const st = teams.status(ctx, cfg, true);
   return {
     configured: teams.isConfigured(ctx.settings),
+    demo: st.demo,
     phase: st.phase,
     startedAt: st.startedAt,
     progress: st.progress || null,
@@ -149,7 +150,7 @@ function me(ctx) {
   const cfg = store.getConfig(ctx);
   const base = {
     user: userInfo(u), isAdmin: isLeaveAdmin(ctx), viewingOther: u.login !== ctx.currentUser.login,
-    sync: { lastSyncAt: cfg.lastSyncAt || null }
+    sync: { lastSyncAt: cfg.lastSyncAt || null, demo: teams.isDemo(ctx.settings) }
   };
   if (!store.isEnabled(u)) return Object.assign(base, { configured: false });
   const profile = store.getProfile(u);

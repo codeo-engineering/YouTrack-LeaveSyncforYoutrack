@@ -1,6 +1,6 @@
 # Privacy Policy – Leave Sync for YouTrack
 
-**Effective date:** 19 November 2026
+**Effective date:** 23 November 2026
 
 This policy explains what data the **Leave Sync for YouTrack** app ("the app") processes, where it is stored and who it is shared with. The app is published by **Codeo Engineering** ("we", "us").
 
@@ -56,7 +56,7 @@ The app sends requests only to Microsoft:
 - `login.microsoftonline.com` (Microsoft Entra ID), to obtain an access token with your app registration's tenant ID, client ID and client secret;
 - `graph.microsoft.com` (Microsoft Graph), to read the data listed above. Requests contain only Microsoft identifiers (team IDs and Teams user IDs).
 
-No data from YouTrack is sent to Microsoft. Microsoft's processing is governed by your organization's agreement with Microsoft and the [Microsoft Privacy Statement](https://privacy.microsoft.com/privacystatement).
+No data from YouTrack is sent to Microsoft. In demo mode ("Use demo data" setting) the app makes no external requests at all; it generates sample data inside YouTrack. Microsoft's processing is governed by your organization's agreement with Microsoft and the [Microsoft Privacy Statement](https://privacy.microsoft.com/privacystatement).
 
 The app does not use analytics, telemetry, advertising or any other external service, and it loads no external scripts or content.
 

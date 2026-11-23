@@ -17,11 +17,15 @@
  * is left (very large teams), the sync pauses and the next sync request resumes it with a new token.
  * Sync progress is kept in AppGlobalStorage.leaveSync and cleared when the sync finishes.
  * The access token only travels through the async execution context (ctx.store), never storage.
+ *
+ * Demo mode ("Use demo data" setting): no Microsoft calls at all. demo-data.js answers the same
+ * Graph requests with sample data and the sync runs to the end inside the request.
  */
 const http = require('@jetbrains/youtrack-scripting-api/http');
 const entities = require('@jetbrains/youtrack-scripting-api/entities');
 const store = require('./store');
 const engine = require('./engine');
+const demo = require('./demo-data');
 
 const LOGIN = 'https://login.microsoftonline.com';
 const GRAPH = 'https://graph.microsoft.com/v1.0';
@@ -38,7 +42,12 @@ class SyncError extends Error {
   constructor(message) { super(message); this.userFacing = true; }
 }
 
+function isDemo(settings) {
+  return !!(settings && settings.demoMode);
+}
+
 function isConfigured(settings) {
+  if (isDemo(settings)) return true;
   return !!(settings && settings.tenantId && settings.clientId && settings.clientSecret && settings.teamIds);
 }
 
@@ -111,6 +120,7 @@ function status(ctx, cfg, admin) {
   if (st && st.running && now - Date.parse(st.updatedAt) < STALE_RUN_MS) phase = 'running';
   else if (st && st.paused && now - Date.parse(st.updatedAt) < PAUSE_RESUME_MS) phase = 'paused';
   const out = {
+    demo: isDemo(ctx.settings),
     phase: phase,
     startedAt: phase !== 'idle' ? st.startedAt : null,
     lastSyncAt: cfg.lastSyncAt || null,
@@ -140,18 +150,22 @@ function start(ctx, opts) {
   let st = getState(ctx);
   if (st && st.running && now - Date.parse(st.updatedAt) < STALE_RUN_MS) return { phase: 'running', startedAt: st.startedAt };
 
-  const resuming = !!(st && st.paused && now - Date.parse(st.updatedAt) < PAUSE_RESUME_MS);
-  if (!resuming && !opts.force) {
+  const demoMode = isDemo(settings);
+  const modeChanged = !!cfg.lastSyncDemo !== demoMode;
+  const resuming = !demoMode && !modeChanged && !!(st && st.paused && now - Date.parse(st.updatedAt) < PAUSE_RESUME_MS);
+  if (!resuming && !opts.force && !modeChanged) {
     const last = cfg.lastSyncAt ? Date.parse(cfg.lastSyncAt) : 0;
     const interval = Math.max(5, +cfg.syncIntervalMinutes || 30) * 60000;
     if (now - last < interval) return { phase: 'fresh', lastSyncAt: cfg.lastSyncAt };
   }
 
-  try {
-    validateSettings(settings);
-  } catch (e) {
-    recordFailure(ctx, e);
-    return { phase: 'failed' };
+  if (!demoMode) {
+    try {
+      validateSettings(settings);
+    } catch (e) {
+      recordFailure(ctx, e);
+      return { phase: 'failed' };
+    }
   }
 
   if (resuming) {
@@ -180,16 +194,41 @@ function start(ctx, opts) {
       requests: 0,
       chainStep: 0
     };
-    teamIdList(settings).forEach(function (teamId) {
+    (demoMode ? [demo.TEAM_ID] : teamIdList(settings)).forEach(function (teamId) {
       st.queue.push({ kind: 'reasons', teamId: teamId, url: teamPath(teamId, 'timeOffReasons') });
       st.queue.push({ kind: 'timesOff', teamId: teamId, url: teamPath(teamId, 'timesOff') });
     });
+  }
+  if (demoMode) {
+    st.demo = true;
+    runDemo(ctx, cfg, st);
+    return { phase: 'done' };
   }
   st.updatedAt = new Date(now).toISOString();
   saveState(ctx, st);
 
   requestToken(ctx, settings, st.id);
   return { phase: resuming ? 'resumed' : 'started', startedAt: st.startedAt };
+}
+
+/** Demo mode: answers the queued Graph requests locally and finishes the sync right away. */
+function runDemo(ctx, cfg, st) {
+  try {
+    const employees = store.listEmployees().map(function (u) { return { login: u.login, name: u.fullName, email: u.email }; });
+    const answer = demo.graph(cfg, st.today, employees);
+    let guard = 0;
+    while (guard++ < 50) {
+      if (!st.queue.length) queueLookups(ctx, st);
+      if (!st.queue.length) break;
+      st.queue.splice(0, BATCH_SIZE).forEach(function (req) {
+        st.requests++;
+        handleOne(st, req, answer(req.url));
+      });
+    }
+    finish(ctx, st);
+  } catch (e) {
+    fail(ctx, st, e);
+  }
 }
 
 function requestToken(ctx, settings, syncId) {
@@ -440,6 +479,15 @@ function finish(ctx, st) {
   cfg.unmatched = cfg.unmatched || {};
   cfg.reasons = cfg.reasons || {};
   const nowIso = new Date().toISOString();
+  const demoRun = !!st.demo;
+
+  // Switching between demo data and Microsoft Teams: forget the other mode's people and reasons.
+  [cfg.userMap, cfg.unmatched].forEach(function (map) {
+    Object.keys(map).forEach(function (id) { if (demo.isDemoId(id) !== demoRun) delete map[id]; });
+  });
+  Object.keys(cfg.reasons).forEach(function (id) {
+    if (demo.isDemoId(id) !== demoRun && !(id in st.reasons)) delete cfg.reasons[id];
+  });
 
   Object.keys(st.reasons).forEach(function (id) {
     const r = st.reasons[id];
@@ -448,7 +496,9 @@ function finish(ctx, st) {
       existing.name = r.name;
       existing.active = r.active;
     } else {
-      cfg.reasons[id] = { name: r.name, deducts: false, reviewed: false, active: r.active, firstSeen: st.today };
+      // In demo mode, Vacation starts as annual leave so balances move right away.
+      const demoVacation = demoRun && id === demo.VACATION_ID;
+      cfg.reasons[id] = { name: r.name, deducts: demoVacation, reviewed: demoVacation, active: r.active, firstSeen: st.today };
     }
   });
 
@@ -477,6 +527,7 @@ function finish(ctx, st) {
       out.sharedStart = rec.sharedStart;
       out.sharedEnd = rec.sharedEnd;
     }
+    if (demoRun) out.demo = true;
     (byLogin[login] = byLogin[login] || []).push(out);
     matchedItems++;
   });
@@ -486,7 +537,8 @@ function finish(ctx, st) {
   store.listEmployees().forEach(function (u) {
     const fresh = byLogin[u.login] || [];
     const old = store.getRecords(u);
-    const kept = old.filter(function (r) { return String(r.start).slice(0, 10) < st.since; });
+    // Older real history is never touched; demo records are removed as soon as real data is synced.
+    const kept = old.filter(function (r) { return String(r.start).slice(0, 10) < st.since && (demoRun || !r.demo); });
     const merged = kept.concat(fresh).sort(function (a, b) { return a.start < b.start ? -1 : 1; });
     if (JSON.stringify(merged) !== JSON.stringify(old)) {
       store.saveRecords(u, merged);
@@ -496,7 +548,9 @@ function finish(ctx, st) {
 
   cfg.lastSyncAt = nowIso;
   cfg.lastSyncError = null;
+  cfg.lastSyncDemo = demoRun;
   cfg.lastSyncSummary = {
+    demo: demoRun,
     since: st.since,
     items: st.itemCount,
     matchedItems: matchedItems,
@@ -553,6 +607,7 @@ function effectiveTimeOff(item, useDrafts) {
 module.exports = {
   effectiveTimeOff: effectiveTimeOff,
   isConfigured: isConfigured,
+  isDemo: isDemo,
   start: start,
   status: status,
   asyncFunctions: { onToken: onToken, onBatch: onBatch },

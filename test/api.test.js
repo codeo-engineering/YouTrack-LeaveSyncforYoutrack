@@ -440,4 +440,47 @@ t('a Graph permission error stops the sync with a clear message and keeps the da
   assert.strictEqual(globalStorage.extensionProperties.leaveSync, null);
 });
 
+t('demo mode: sample data without any Microsoft call', () => {
+  // A real record from long ago must survive demo mode.
+  const recs = JSON.parse(ayse.extensionProperties.leaveRecords);
+  recs.unshift({ id: 'OLD1', start: '2020-02-03T06:00:00Z', end: '2020-02-03T14:00:00Z', reasonId: 'TOR_off' });
+  ayse.extensionProperties.leaveRecords = JSON.stringify(recs);
+  const before = graphCalls.length;
+  settings.demoMode = true;
+  const r = call(admin, 'POST', 'admin-sync');
+  assert.strictEqual(r.code, 200, JSON.stringify(r.body));
+  assert.strictEqual(r.body.phase, 'done');
+  assert.strictEqual(r.body.demo, true);
+  assert.strictEqual(graphCalls.length, before, 'no Microsoft call in demo mode');
+  const mine = JSON.parse(ayse.extensionProperties.leaveRecords);
+  assert.ok(mine.some(x => x.id === 'OLD1'), 'older real history kept');
+  const demoRecs = mine.filter(x => x.demo);
+  assert.ok(demoRecs.length >= 7, String(demoRecs.length));
+  assert.ok(!demoRecs.some(x => x.note === 'Cancelled'), 'staged deletion ignored');
+  const shortened = demoRecs.find(x => x.note === 'Shortened by manager');
+  assert.ok(shortened.unshared && Date.parse(shortened.end) - Date.parse(shortened.start) === 86400000, 'unshared change counted');
+  const state = call(admin, 'GET', 'admin-state').body;
+  assert.strictEqual(state.sync.demo, true);
+  assert.ok(state.reasons.some(x => x.name === 'Vacation' && x.deducts), 'Vacation counts as annual leave in demo mode');
+  assert.ok(state.reasons.some(x => x.name === 'Sick' && !x.deducts));
+  assert.ok(state.unmatched.some(u => u.email === 'jordan.rivers@demo.invalid'), JSON.stringify(state.unmatched));
+  const me = call(ayse, 'GET', 'me').body;
+  assert.strictEqual(me.sync.demo, true);
+  assert.ok(me.balance.configured);
+  assert.ok(!globalStorage.extensionProperties.leaveSync);
+});
+
+t('turning demo mode off replaces demo data with Teams data', () => {
+  settings.demoMode = false;
+  const r = call(ayse, 'POST', 'sync'); // mode changed -> refresh even though the data is fresh
+  assert.strictEqual(r.code, 202, JSON.stringify(r.body));
+  const mine = JSON.parse(ayse.extensionProperties.leaveRecords);
+  assert.ok(!mine.some(x => x.demo), 'demo records removed');
+  assert.ok(mine.some(x => x.id === 'OLD1'));
+  const state = call(admin, 'GET', 'admin-state').body;
+  assert.strictEqual(state.sync.demo, false);
+  assert.ok(!state.reasons.some(x => /^demo-/.test(x.id)), 'demo reasons removed');
+  assert.ok(!state.unmatched.some(u => /demo/.test(u.email || '')), 'demo people removed');
+});
+
 console.log('\n' + passed + ' passed');

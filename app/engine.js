@@ -582,6 +582,8 @@ module.exports = {
   openingForRemainingOn: openingForRemainingOn,
   addYears: addYears,
   addDays: addDays,
+  dayOfWeek: dayOfWeek,
+  localMidnightUtc: localMidnightUtc,
   todayIso: todayIso,
   offsetMs: offsetMs,
   localTime: localTime,

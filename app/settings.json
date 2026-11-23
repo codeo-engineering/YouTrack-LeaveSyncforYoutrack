@@ -4,6 +4,12 @@
   "title": "Leave Sync for YouTrack – settings",
   "description": "Connection to Microsoft Teams Shifts (Microsoft Graph app registration) and who may manage leave.",
   "properties": {
+    "demoMode": {
+      "type": "boolean",
+      "title": "Use demo data (no Microsoft connection)",
+      "description": "Try the app without Microsoft 365: sample Teams Shifts time off is generated for the employees you add. The Microsoft settings below are ignored while this is on. Turn it off to sync real data; demo leave is then replaced by your Teams data.",
+      "x-scope": "GLOBAL"
+    },
     "tenantId": {
       "type": "string",
       "title": "Microsoft Entra tenant ID",
