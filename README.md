@@ -202,7 +202,7 @@ Finally, open **Leaves → View → Team overview** and compare a few balances w
 | Tracking start | Teams leave before *Count Teams leave from* is ignored because it is already included in the carried-in balance. People hired within roughly the last 13 months start at their hire date. |
 | Overrides | Per-year entitlement overrides, manual adjustments and per-leave corrections, each recorded in Change history |
 
-The defaults follow Turkish labour law; all values can be changed by an administrator.
+The entitlement defaults are only a starting point; set them to your company's policy. New installations start with no built-in holidays and UTC+0, so pick your country and time zone on the Holidays & working time tab.
 
 ---
 
@@ -233,7 +233,7 @@ The defaults follow Turkish labour law; all values can be changed by an administ
 
 - **New employee:** Employees → Add employee.
 - **Employee leaves:** select them → **Stop tracking**. Data is kept; adding them again restores it.
-- **Every year:** add holidays that aren't built in (religious holidays in Türkiye, regional holidays in Germany).
+- **Every year:** add holidays that aren't built in (regional holidays, or religious holidays in Türkiye after 2027).
 - **New reason in Teams:** review it on the Leave types tab.
 - **Before the client secret expires:** create a new one in Entra and update the app settings.
 

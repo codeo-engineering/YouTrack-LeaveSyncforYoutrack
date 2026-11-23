@@ -120,13 +120,13 @@
   <li><b>Leave types:</b> the time-off reasons from Teams are listed here. Tick the ones that are <b>deducted from annual leave</b> (usually <i>Off</i> / vacation) and click <b>Save</b>. Unticked types are counted and shown, but not deducted. Check local law before ticking sick-leave types.</li>
   <li><b>Holidays &amp; working time:</b>
     <ul>
-      <li>Choose <b>Built-in public holidays</b>: <i>Türkiye</i>, <i>Germany (nationwide)</i> or <i>None</i>. Built-in holidays are added every year, and Easter-based dates are calculated automatically.</li>
-      <li>Add regional or movable holidays under <b>Other days off</b>. For example, add your federal state's holidays in Germany, or the religious holidays in Türkiye.</li>
-      <li>Set the <b>UTC offset</b> and <b>Daylight saving time</b>. Germany: 1 and <i>EU summer time</i>. Türkiye: 3 and <i>None</i>.</li>
+      <li>Choose <b>Built-in public holidays</b>: <i>Türkiye</i>, <i>Germany (nationwide)</i> or <i>None</i>. A new installation starts with <i>None</i>. Built-in holidays are added every year, and Easter-based dates are calculated automatically.</li>
+      <li>Add everything that isn't built in under <b>Other days off</b>: your country's public holidays if you chose <i>None</i>, regional holidays such as your federal state's holidays in Germany, and company days off. In Türkiye, Ramadan Feast and Sacrifice Feast are built in for 2026 and 2027; add later years when they are announced.</li>
+      <li>Set your company's <b>UTC offset</b> (winter time; a new installation starts at 0) and <b>Daylight saving time</b>. For example, Germany: 1 and <i>EU summer time</i>; Türkiye: 3 and <i>None</i>.</li>
       <li>Check the working hours per day (default 8) and the non-working days (default Sat/Sun).</li>
     </ul>
     Weekends and holidays are never deducted, and half-day holidays count as half a day.</li>
-  <li><b>Entitlement rules:</b> check the annual leave by years of service (default 1–5 years: 14, 6–14 years: 21, 15+ years: 26 days) and the optional age rule.</li>
+  <li><b>Entitlement rules:</b> set the annual leave by years of service to your company's policy (the starting values are 1–5 years: 14, 6–14 years: 21, 15+ years: 26 days), and turn the optional age rule on or off.</li>
   <li><b>Employees → + Add employee:</b> pick the person, enter the hire date and click <b>Add</b>. Their leave is loaded from Teams right away. Then, in the right panel:
     <ul>
       <li>Under <b>Remaining today</b>, enter how many days the person has left today and click <b>Calculate</b>. This is the easiest way. Future approved leave is deducted when it happens.</li>
@@ -255,7 +255,7 @@
 <ul>
   <li><b>New employee:</b> Employees → Add employee.</li>
   <li><b>Employee leaves the company:</b> select them → Stop tracking. Their data is kept.</li>
-  <li><b>Every year:</b> add next year's holidays that aren't built in, such as religious holidays in Türkiye or regional holidays in Germany.</li>
+  <li><b>Every year:</b> add next year's holidays that aren't built in, such as regional holidays or, in Türkiye, religious holidays after 2027.</li>
   <li><b>New reason in Teams:</b> review it on the Leave types tab, where it is marked <i>Needs review</i>.</li>
   <li><b>Before the client secret expires:</b> create a new one in Entra and update the app settings.</li>
   <li><b>Updating the app:</b> install the new version over the existing one. Don't delete the app: deleting it removes all of its data.</li>

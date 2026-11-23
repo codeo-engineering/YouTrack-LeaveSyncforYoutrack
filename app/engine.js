@@ -7,7 +7,8 @@
  * -----
  * - Leave years run from one work anniversary (hire date + k years) to the next.
  *   Period k starts on the k-th anniversary. Period 0 is the first year (no entitlement yet).
- * - Entitlement of period k depends on seniority k (tiers, default 1-5 → 14, 6-14 → 21, 15+ → 26)
+ * - Entitlement of period k depends on seniority k (tiers, default 1-5 → 14, 6-14 → 21, 15+ → 26;
+ *   configurable in Leave Management)
  *   and an optional age floor (≤18 or ≥50 years old → at least 20 days).
  * - Unused leave carries over: remaining(k) = carry-in + entitlement + adjustments − used.
  * - Leave is counted in hours: weekends and public holidays are not deducted, half-day
@@ -19,34 +20,16 @@
 const DAY_MS = 86400000;
 const HOUR_MS = 3600000;
 
+// Defaults for a new installation: no country assumed. Administrators choose built-in holidays
+// (Türkiye, Germany or none), the time zone and the entitlement rules in Leave Management.
 const DEFAULT_CONFIG = {
   workdayHours: 8,
   weekendDays: [0, 6], // 0 = Sunday, 6 = Saturday
-  utcOffsetMinutes: 180, // standard (winter) offset; Europe/Istanbul = UTC+3
+  utcOffsetMinutes: 0, // standard (winter) offset, e.g. 60 for Germany, 180 for Türkiye
   dstRule: 'NONE', // 'NONE' or 'EU' (+1 h from the last Sunday of March to the last Sunday of October, 01:00 UTC)
   autoFixedHolidays: true,
-  holidayCountry: 'TR', // built-in public holidays: 'TR' (Türkiye), 'DE' (Germany, nationwide) or 'NONE'
-  holidays: [
-    // Türkiye: religious holidays move every year – maintained in the admin page.
-    { date: '2026-03-19', name: 'Ramadan Feast Eve', half: true },
-    { date: '2026-03-20', name: 'Ramadan Feast (day 1)', half: false },
-    { date: '2026-03-21', name: 'Ramadan Feast (day 2)', half: false },
-    { date: '2026-03-22', name: 'Ramadan Feast (day 3)', half: false },
-    { date: '2026-05-26', name: 'Sacrifice Feast Eve', half: true },
-    { date: '2026-05-27', name: 'Sacrifice Feast (day 1)', half: false },
-    { date: '2026-05-28', name: 'Sacrifice Feast (day 2)', half: false },
-    { date: '2026-05-29', name: 'Sacrifice Feast (day 3)', half: false },
-    { date: '2026-05-30', name: 'Sacrifice Feast (day 4)', half: false },
-    { date: '2027-03-08', name: 'Ramadan Feast Eve', half: true },
-    { date: '2027-03-09', name: 'Ramadan Feast (day 1)', half: false },
-    { date: '2027-03-10', name: 'Ramadan Feast (day 2)', half: false },
-    { date: '2027-03-11', name: 'Ramadan Feast (day 3)', half: false },
-    { date: '2027-05-15', name: 'Sacrifice Feast Eve', half: true },
-    { date: '2027-05-16', name: 'Sacrifice Feast (day 1)', half: false },
-    { date: '2027-05-17', name: 'Sacrifice Feast (day 2)', half: false },
-    { date: '2027-05-18', name: 'Sacrifice Feast (day 3)', half: false },
-    { date: '2027-05-19', name: 'Sacrifice Feast (day 4)', half: false }
-  ],
+  holidayCountry: 'NONE', // built-in public holidays: 'TR' (Türkiye), 'DE' (Germany, nationwide) or 'NONE'
+  holidays: [], // other days off added by the administrator: { date, name, half }
   tiers: [
     { fromYears: 1, days: 14 },
     { fromYears: 6, days: 21 },
@@ -159,9 +142,16 @@ function yearsBetween(fromIso, toIso) {
 
 // ---------- config ----------
 
+// Installations created before 1.4.0 started with Türkiye defaults. If their stored settings miss
+// one of these fields, they keep the old value so nothing changes for them.
+const LEGACY_DEFAULTS = { utcOffsetMinutes: 180, holidayCountry: 'TR' };
+
 function mergeConfig(stored) {
   const cfg = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   if (!stored) return cfg;
+  Object.keys(LEGACY_DEFAULTS).forEach(function (k) {
+    if (stored[k] === undefined || stored[k] === null) cfg[k] = LEGACY_DEFAULTS[k];
+  });
   Object.keys(stored).forEach(function (k) {
     if (stored[k] !== undefined && stored[k] !== null) cfg[k] = stored[k];
   });
@@ -192,14 +182,27 @@ const HOLIDAY_COUNTRIES = {
 function holidayCountry(cfg) {
   if (cfg && cfg.autoFixedHolidays === false) return 'NONE';
   const c = cfg && cfg.holidayCountry;
-  return HOLIDAY_COUNTRIES[c] ? c : 'TR';
+  return HOLIDAY_COUNTRIES[c] ? c : 'NONE';
 }
+
+// Türkiye: religious holidays follow the lunar calendar and move every year. Known years are built in;
+// later years are added by the administrator under "Other days off".
+const TR_RELIGIOUS = {
+  2026: [
+    ['2026-03-19', 'Ramadan Feast Eve', true], ['2026-03-20', 'Ramadan Feast (day 1)'], ['2026-03-21', 'Ramadan Feast (day 2)'], ['2026-03-22', 'Ramadan Feast (day 3)'],
+    ['2026-05-26', 'Sacrifice Feast Eve', true], ['2026-05-27', 'Sacrifice Feast (day 1)'], ['2026-05-28', 'Sacrifice Feast (day 2)'], ['2026-05-29', 'Sacrifice Feast (day 3)'], ['2026-05-30', 'Sacrifice Feast (day 4)']
+  ],
+  2027: [
+    ['2027-03-08', 'Ramadan Feast Eve', true], ['2027-03-09', 'Ramadan Feast (day 1)'], ['2027-03-10', 'Ramadan Feast (day 2)'], ['2027-03-11', 'Ramadan Feast (day 3)'],
+    ['2027-05-15', 'Sacrifice Feast Eve', true], ['2027-05-16', 'Sacrifice Feast (day 1)'], ['2027-05-17', 'Sacrifice Feast (day 2)'], ['2027-05-18', 'Sacrifice Feast (day 3)'], ['2027-05-19', 'Sacrifice Feast (day 4)']
+  ]
+};
 
 /** Built-in public holidays for a year. Names are in English. */
 function fixedHolidays(year, country) {
-  country = country || 'TR';
+  country = country || 'NONE';
   if (country === 'TR') {
-    // Law 2429 – fixed-date national holidays (religious holidays move and are added by the admin)
+    // Law 2429 – fixed-date national holidays, plus the religious holidays of known years
     return [
       { date: year + '-01-01', name: 'New Year\'s Day', half: false },
       { date: year + '-04-23', name: 'National Sovereignty and Children\'s Day', half: false },
@@ -209,7 +212,9 @@ function fixedHolidays(year, country) {
       { date: year + '-08-30', name: 'Victory Day', half: false },
       { date: year + '-10-28', name: 'Republic Day Eve', half: true },
       { date: year + '-10-29', name: 'Republic Day', half: false }
-    ];
+    ].concat((TR_RELIGIOUS[year] || []).map(function (h) {
+      return { date: h[0], name: h[1], half: !!h[2] };
+    })).sort(function (x, y) { return x.date < y.date ? -1 : 1; });
   }
   if (country === 'DE') {
     // Public holidays observed in every German state (regional ones are added by the admin)

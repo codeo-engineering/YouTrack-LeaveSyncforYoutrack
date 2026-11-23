@@ -199,4 +199,33 @@ t('Türkiye preset uses English names', () => {
   assert.strictEqual(E.fixedHolidays(2026, 'NONE').length, 0);
 });
 
+t('new installations start without a country; older ones keep Türkiye', () => {
+  const fresh = E.mergeConfig(null);
+  assert.strictEqual(fresh.holidayCountry, 'NONE');
+  assert.strictEqual(fresh.utcOffsetMinutes, 0);
+  assert.deepStrictEqual(fresh.holidays, []);
+  assert.strictEqual(E.holidayLookup(fresh)('2026-01-01'), null, 'no built-in holiday by default');
+  const legacy = E.mergeConfig({ reasons: {}, tiers: fresh.tiers });
+  assert.strictEqual(legacy.holidayCountry, 'TR');
+  assert.strictEqual(legacy.utcOffsetMinutes, 180);
+  const saved = E.mergeConfig({ holidayCountry: 'DE', utcOffsetMinutes: 60 });
+  assert.strictEqual(saved.holidayCountry, 'DE');
+  assert.strictEqual(saved.utcOffsetMinutes, 60);
+});
+
+t('Türkiye: religious holidays of known years are built in and not counted twice', () => {
+  const tr = E.mergeConfig({ holidayCountry: 'TR', utcOffsetMinutes: 180 });
+  const look = E.holidayLookup(tr);
+  assert.strictEqual(look('2026-03-20').name, 'Ramadan Feast (day 1)');
+  assert.strictEqual(look('2027-05-15').half, true);
+  assert.strictEqual(look('2026-03-20').half, false);
+  // Older installations also have the same days under "Other days off".
+  const both = E.mergeConfig({ holidayCountry: 'TR', utcOffsetMinutes: 180, holidays: [{ date: '2026-03-19', name: 'Ramadan Feast Eve', half: true }, { date: '2026-03-20', name: 'Ramadan Feast (day 1)', half: false }] });
+  const rec = { id: 'x', start: '2026-03-16T21:00:00Z', end: '2026-03-21T21:00:00Z', reasonId: 'r' };
+  const hours = E.leaveHoursByDay(rec, both, E.holidayLookup(both)).reduce((a, p) => a + p.hours, 0);
+  // Local Tue 17 – Sat 21 March: 17 and 18 full (16 h), 19 eve half day (4 h), 20 holiday, 21 weekend → 20 h
+  assert.strictEqual(hours, 20);
+  assert.strictEqual(E.fixedHolidays(2026, 'DE').some(h => /Feast/.test(h.name)), false);
+});
+
 console.log('\n' + passed + ' passed');

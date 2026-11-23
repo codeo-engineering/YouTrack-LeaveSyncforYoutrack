@@ -451,7 +451,7 @@ function renderCalendar(root) {
   const autoList = h('div');
   const help = h('p', { class: 'small muted' });
   const HELP = {
-    TR: 'Religious holidays (Ramadan Feast, Sacrifice Feast) move every year – add them below when they are announced. Eve days are half days (from 13:00).',
+    TR: 'Ramadan Feast and Sacrifice Feast are built in for 2026 and 2027. They move every year: add later years below when they are announced. Eve days are half days (from 13:00).',
     DE: 'Only holidays observed in every federal state are built in. Add your state\'s regional holidays below (for example Epiphany, Corpus Christi, Reformation Day or All Saints\' Day), and Christmas Eve or New Year\'s Eve as half days if your company gives them.',
     NONE: 'No holidays are added automatically. Add every public holiday below.'
   };
@@ -492,7 +492,7 @@ function renderCalendar(root) {
       h('h2', null, 'Working time'),
       h('div', { class: 'form-grid' },
         h('label', { class: 'field' }, 'Working hours per day', hours, h('span', { class: 'help' }, 'Used to turn hourly leave into days.')),
-        h('label', { class: 'field' }, 'UTC offset (hours, winter)', offset, h('span', { class: 'help' }, 'Türkiye: 3 · Germany: 1')),
+        h('label', { class: 'field' }, 'UTC offset (hours, winter)', offset, h('span', { class: 'help' }, 'e.g. UK 0 · Germany 1 · Türkiye 3')),
         h('label', { class: 'field' }, 'Daylight saving time', dst, h('span', { class: 'help' }, 'Last Sunday of March to last Sunday of October. Germany: EU summer time.'))),
       h('div', { style: { marginTop: '14px' } }, h('div', { class: 'small muted', style: { marginBottom: '6px' } }, 'Non-working days (never deducted)'),
         h('div', { class: 'row' }, WEEKDAYS.map(([n, label]) => {
