@@ -49,13 +49,13 @@ Every employee gets a **Leaves** page in the YouTrack main menu with their own r
   - Manual adjustments with a required reason
   - Corrections of individual Teams leave items (different number of days/hours, or excluded)
   - Leave types: choose which Teams reasons are deducted from annual leave
-  - Public holidays (built-in Türkiye and Germany, or none) plus your own days off
+  - Public holidays and company days off that you enter, one year at a time, with copy from the previous year
   - Working hours per day, non-working days, company time zone and EU summer time
   - Teams connection status, manual sync, automatic refresh and linking of people whose e-mail differs
   - Change history of every administrative change
 
 **Leave counting**
-- Weekends and public holidays are never deducted; half-day holidays count as half a day
+- Weekends and the public holidays you enter are never deducted; half-day holidays count as half a day
 - Full-day, half-day and hourly leave are supported
 - Changes a manager makes in the Shifts schedule count right away, even before they are shared with the team
 
@@ -106,7 +106,7 @@ All Microsoft requests are **asynchronous**: the endpoint that starts a sync ans
 No Microsoft 365 tenant yet? In the app settings tick **Use demo data (no Microsoft connection)**, add a few employees on the **Employees** tab and open **Leaves**. The app generates sample Teams Shifts time off for every employee you add, relative to today:
 - vacations, one of them spanning a weekend;
 - a half day and an hourly sick leave;
-- leave around New Year's Day, which is a public holiday;
+- leave around New Year's Day (add 1 January as a holiday to see it excluded);
 - upcoming leave;
 - a request a manager shortened without sharing it yet;
 - a deleted request that is not counted.
@@ -171,7 +171,7 @@ Everything below is in **Administration → Integrations → Leave Management**.
 
 1. **Leave types** – tick the Teams reasons that are deducted from annual leave (usually *Vacation*/*Off*). Unticked types are counted and shown but not deducted. New reasons appear as *Needs review*.
 2. **Holidays & working time**
-   - Built-in public holidays: *Türkiye*, *Germany (nationwide)* or *None*. Easter-based dates are calculated every year.
+   - Add your public holidays and company days off under **Public holidays and days off** (optional, but a leave that spans a holiday only counts correctly if the holiday is listed). Use **Copy … to …** for the next year and check the dates that move.
    - Add regional, religious or company days off under **Other days off** (full or half day).
    - Time zone: Germany `UTC+1` with *EU summer time*; Türkiye `UTC+3` with *None*.
    - Hours per working day (default 8) and non-working days (default Sat/Sun).
@@ -202,7 +202,7 @@ Finally, open **Leaves → View → Team overview** and compare a few balances w
 | Tracking start | Teams leave before *Count Teams leave from* is ignored because it is already included in the carried-in balance. People hired within roughly the last 13 months start at their hire date. |
 | Overrides | Per-year entitlement overrides, manual adjustments and per-leave corrections, each recorded in Change history |
 
-The entitlement defaults are only a starting point; set them to your company's policy. New installations start with no built-in holidays and UTC+0, so pick your country and time zone on the Holidays & working time tab.
+The entitlement defaults are only a starting point; set them to your company's policy. New installations start with no holidays and UTC+0: enter your holidays and time zone on the Holidays & working time tab. Installations from before 1.4.0 that used the built-in Türkiye or Germany lists get those holidays (2020 to next year) copied into their own list automatically.
 
 ---
 
@@ -233,7 +233,7 @@ The entitlement defaults are only a starting point; set them to your company's p
 
 - **New employee:** Employees → Add employee.
 - **Employee leaves:** select them → **Stop tracking**. Data is kept; adding them again restores it.
-- **Every year:** add holidays that aren't built in (regional holidays, or religious holidays in Türkiye after 2027).
+- **Every year:** add next year's public holidays (Year → **Copy**, then check the dates that move).
 - **New reason in Teams:** review it on the Leave types tab.
 - **Before the client secret expires:** create a new one in Entra and update the app settings.
 

@@ -79,7 +79,7 @@ function timeOffFor(cfg, today, userId, n) {
   add(allDay(cfg, week, 7), 'demo-vacation', 'Summer holiday');
   // Three vacation days.
   add(allDay(cfg, weekday(engine.addDays(today, -60 + shift)), 3), 'demo-vacation', null);
-  // Time off around New Year's Day (a public holiday in the built-in calendars).
+  // Time off around New Year's Day: add 1 January under Holidays & working time to see it excluded.
   const newYear = String(+today.slice(0, 4) - (today.slice(5) < '01-10' ? 1 : 0)) + '-01-01';
   if (newYear < today) add(allDay(cfg, engine.addDays(newYear, -1), 3), 'demo-vacation', 'New Year');
   // Half a day and a few hours.

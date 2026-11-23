@@ -120,8 +120,8 @@
   <li><b>Leave types:</b> the time-off reasons from Teams are listed here. Tick the ones that are <b>deducted from annual leave</b> (usually <i>Off</i> / vacation) and click <b>Save</b>. Unticked types are counted and shown, but not deducted. Check local law before ticking sick-leave types.</li>
   <li><b>Holidays &amp; working time:</b>
     <ul>
-      <li>Choose <b>Built-in public holidays</b>: <i>Türkiye</i>, <i>Germany (nationwide)</i> or <i>None</i>. A new installation starts with <i>None</i>. Built-in holidays are added every year, and Easter-based dates are calculated automatically.</li>
-      <li>Add everything that isn't built in under <b>Other days off</b>: your country's public holidays if you chose <i>None</i>, regional holidays such as your federal state's holidays in Germany, and company days off. In Türkiye, Ramadan Feast and Sacrifice Feast are built in for 2026 and 2027; add later years when they are announced.</li>
+      <li>Under <b>Public holidays and days off</b>, add this year's public holidays and company days off with <b>+ Add day</b>. Tick <b>Half day</b> for days that are only half off. This is optional, but a leave that spans a holiday is only counted correctly if the holiday is in the list.</li>
+      <li>For the next year, pick it in <b>Year</b> and click <b>Copy … to …</b>, then correct the dates of holidays that move every year (for example Easter or religious holidays).</li>
       <li>Set your company's <b>UTC offset</b> (winter time; a new installation starts at 0) and <b>Daylight saving time</b>. For example, Germany: 1 and <i>EU summer time</i>; Türkiye: 3 and <i>None</i>.</li>
       <li>Check the working hours per day (default 8) and the non-working days (default Sat/Sun).</li>
     </ul>
@@ -217,8 +217,7 @@
       <li>Hours per working day, used to turn hourly leave into days.</li>
       <li>Non-working days.</li>
       <li>Company time zone: UTC offset plus optional EU summer time, so all-day leave always falls on the right date.</li>
-      <li><b>Built-in public holidays:</b> Türkiye, Germany (nationwide) or None. Easter-based holidays are calculated for every year.</li>
-      <li><b>Other days off:</b> regional, religious or company holidays you add yourself. <i>Half day</i> counts as half a working day.</li>
+      <li><b>Public holidays and days off:</b> the holidays and company days off you enter, shown one year at a time. Leave on these days is not deducted, and <i>Half day</i> counts as half a working day. <b>Copy … to …</b> copies the previous year's days as a starting point.</li>
     </ul>
   </li>
   <li><b>Entitlement rules:</b> days of annual leave by years of service, plus an optional minimum for young and older employees (needs a birth date).</li>
@@ -255,7 +254,7 @@
 <ul>
   <li><b>New employee:</b> Employees → Add employee.</li>
   <li><b>Employee leaves the company:</b> select them → Stop tracking. Their data is kept.</li>
-  <li><b>Every year:</b> add next year's holidays that aren't built in, such as regional holidays or, in Türkiye, religious holidays after 2027.</li>
+  <li><b>Every year:</b> add next year's public holidays (Holidays &amp; working time → Year → <b>Copy</b>, then check the dates that move).</li>
   <li><b>New reason in Teams:</b> review it on the Leave types tab, where it is marked <i>Needs review</i>.</li>
   <li><b>Before the client secret expires:</b> create a new one in Entra and update the app settings.</li>
   <li><b>Updating the app:</b> install the new version over the existing one. Don't delete the app: deleting it removes all of its data.</li>

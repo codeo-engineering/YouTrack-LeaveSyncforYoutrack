@@ -445,46 +445,51 @@ function renderCalendar(root) {
     h('option', { value: 'NONE' }, 'None'),
     h('option', { value: 'EU' }, 'EU summer time (+1 h)'));
   dst.value = c.dstRule || 'NONE';
-  const country = h('select', { 'aria-label': 'Built-in public holidays' },
-    Object.keys(c.countries).map(k => h('option', { value: k }, c.countries[k])));
-  country.value = c.holidayCountry;
-  const autoList = h('div');
-  const help = h('p', { class: 'small muted' });
-  const HELP = {
-    TR: 'Ramadan Feast and Sacrifice Feast are built in for 2026 and 2027. They move every year: add later years below when they are announced. Eve days are half days (from 13:00).',
-    DE: 'Only holidays observed in every federal state are built in. Add your state\'s regional holidays below (for example Epiphany, Corpus Christi, Reformation Day or All Saints\' Day), and Christmas Eve or New Year\'s Eve as half days if your company gives them.',
-    NONE: 'No holidays are added automatically. Add every public holiday below.'
-  };
-  function drawAuto() {
-    clear(autoList);
-    const list = (c.fixedByCountry[country.value] || []);
-    if (list.length) {
-      autoList.appendChild(h('div', { class: 'small muted', style: { margin: '10px 0 6px' } }, 'Added automatically every year (' + year + ' shown):'));
-      autoList.appendChild(h('div', { class: 'holiday-grid' }, list.map(x =>
-        h('div', { class: 'row small', style: { gap: '8px' } },
-          h('span', { class: 'muted', style: { minWidth: '52px' } }, LT.date(x.date).replace(/ \d{4}$/, '')),
-          h('span', null, x.name), x.half ? h('span', { class: 'badge neutral' }, 'half day') : null))));
-    }
-    help.textContent = HELP[country.value] || '';
+  // Public holidays and other days off: entered by the administrator, shown one year at a time.
+  const rows = c.holidays.map(x => Object.assign({}, x)).sort((a, b) => a.date < b.date ? -1 : 1);
+  let shownYear = year;
+  const yearSel = h('select', { 'aria-label': 'Year' });
+  function drawYears() {
+    const ys = new Set([String(+year - 1), year, String(+year + 1)]);
+    rows.forEach(r => { if (r.date) ys.add(r.date.slice(0, 4)); });
+    clear(yearSel);
+    [...ys].sort().forEach(y => yearSel.appendChild(h('option', { value: y }, y)));
+    yearSel.appendChild(h('option', { value: 'all' }, 'All years'));
+    yearSel.value = shownYear;
   }
-  country.addEventListener('change', () => {
-    // sensible time-zone defaults for the chosen country (can be changed before saving)
-    if (country.value === 'DE') { offset.value = 1; dst.value = 'EU'; }
-    if (country.value === 'TR') { offset.value = 3; dst.value = 'NONE'; }
-    drawAuto();
-  });
-  drawAuto();
-
-  const rows = c.holidays.map(x => Object.assign({}, x));
+  yearSel.addEventListener('change', () => { shownYear = yearSel.value; drawRows(); });
   const tbody = h('tbody');
+  const copyBtn = h('button', { onclick: () => {
+    if (shownYear === 'all') return;
+    const prev = String(+shownYear - 1);
+    const have = new Set(rows.map(r => r.date));
+    let added = 0;
+    rows.filter(r => r.date && r.date.startsWith(prev)).forEach(r => {
+      const date = shownYear + r.date.slice(4);
+      if (r.date.slice(5) === '02-29' || have.has(date)) return;
+      rows.push({ date: date, name: r.name, half: !!r.half, copied: true });
+      added++;
+    });
+    rows.sort((a, b) => (a.date || '9') < (b.date || '9') ? -1 : 1);
+    drawRows();
+    LT.toast(added ? added + ' day(s) copied. Check the dates of holidays that move every year, then click Save.' : 'Nothing to copy from ' + prev + '.');
+  } });
   function drawRows() {
     clear(tbody);
-    rows.forEach((r, i) => tbody.appendChild(h('tr', null,
+    copyBtn.textContent = shownYear === 'all' ? 'Copy from previous year' : 'Copy ' + (+shownYear - 1) + ' to ' + shownYear;
+    copyBtn.disabled = shownYear === 'all';
+    const visible = rows.filter(r => shownYear === 'all' || !r.date || r.date.startsWith(shownYear));
+    if (!visible.length) {
+      tbody.appendChild(h('tr', null, h('td', { colspan: '4', class: 'muted small' }, 'No days entered for ' + (shownYear === 'all' ? 'any year' : shownYear) + '.')));
+    }
+    visible.forEach(r => tbody.appendChild(h('tr', null,
       h('td', null, h('input', { type: 'date', value: r.date, oninput: e => { r.date = e.target.value; } })),
-      h('td', null, h('input', { type: 'text', value: r.name, style: { width: '100%' }, oninput: e => { r.name = e.target.value; } })),
+      h('td', null, h('input', { type: 'text', value: r.name, style: { width: '100%' }, oninput: e => { r.name = e.target.value; } }),
+        r.copied ? h('div', { class: 'small muted' }, 'Copied – check the date') : null),
       h('td', null, h('label', { class: 'row small' }, h('input', { type: 'checkbox', checked: r.half, onchange: e => { r.half = e.target.checked; } }), 'Half day')),
-      h('td', null, h('button', { class: 'link', onclick: () => { rows.splice(i, 1); drawRows(); } }, 'Remove')))));
+      h('td', null, h('button', { class: 'link', onclick: () => { rows.splice(rows.indexOf(r), 1); drawRows(); } }, 'Remove')))));
   }
+  drawYears();
   drawRows();
 
   root.appendChild(h('div', { class: 'stack', style: { maxWidth: '860px' } },
@@ -501,14 +506,13 @@ function renderCalendar(root) {
         })))
     ),
     h('div', { class: 'card' },
-      h('h2', null, 'Public holidays'),
-      h('label', { class: 'field', style: { maxWidth: '320px' } }, 'Built-in public holidays', country),
-      autoList,
-      h('h3', { style: { marginTop: '18px' } }, 'Other days off'),
-      help,
+      h('div', { class: 'row' }, h('h2', { style: { margin: 0 } }, 'Public holidays and days off'), h('span', { class: 'spacer' }),
+        h('label', { class: 'row small' }, 'Year', yearSel)),
+      h('p', { class: 'small muted' }, 'Leave that falls on these days is not deducted. Add your public holidays and company days off; tick Half day for days that are only half off. Optional, but without them a leave that spans a holiday counts that day too.'),
       h('table', null, h('thead', null, h('tr', null, h('th', null, 'Date'), h('th', null, 'Name'), h('th', null, ''), h('th', null, ''))), tbody),
       h('div', { class: 'row', style: { marginTop: '10px' } },
-        h('button', { onclick: () => { rows.push({ date: '', name: '', half: false }); drawRows(); } }, '+ Add day'))
+        h('button', { onclick: () => { rows.push({ date: '', name: '', half: false }); drawRows(); } }, '+ Add day'),
+        copyBtn)
     ),
     h('div', { class: 'row' }, h('span', { class: 'spacer' }),
       h('button', { class: 'primary', onclick: () => act(async () => {
@@ -517,8 +521,7 @@ function renderCalendar(root) {
           utcOffsetMinutes: Math.round(Number(offset.value) * 60),
           dstRule: dst.value,
           weekendDays: WEEKDAYS.map(([n]) => n).filter(n => weekend[n].checked),
-          holidayCountry: country.value,
-          holidays: rows.filter(r => r.date)
+          holidays: rows.filter(r => r.date).map(r => ({ date: r.date, name: r.name, half: !!r.half }))
         });
         await refresh(!!S.selected);
       }, 'Calendar saved') }, 'Save'))

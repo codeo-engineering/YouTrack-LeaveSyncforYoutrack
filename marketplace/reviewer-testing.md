@@ -67,7 +67,7 @@ node test/shot-server.js            # or DEMO=1 node test/shot-server.js for dem
 | Employee opens **Leaves** | Sees only their own balance, usage by type and history |
 | Admin opens **Leaves → View → Team overview** | Sees every tracked employee |
 | Leave types: tick *Vacation* as annual leave | Vacation days are deducted; other types are only counted |
-| Time off on a weekend or public holiday | Not deducted |
+| Time off on a weekend, or on a day added under Holidays & working time | Not deducted |
 | Half-day or hourly time off | Counted in hours |
 | Shorten a time off in Shifts **without** sharing, then **Sync now** | New length counts; marked *not shared in Teams* |
 | Delete a time off in Shifts and share, then **Sync now** | It disappears from the history |

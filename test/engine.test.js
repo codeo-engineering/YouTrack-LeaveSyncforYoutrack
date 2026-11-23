@@ -199,21 +199,32 @@ t('Türkiye preset uses English names', () => {
   assert.strictEqual(E.fixedHolidays(2026, 'NONE').length, 0);
 });
 
-t('new installations start without a country; older ones keep Türkiye', () => {
+t('holidays are entered by hand; built-in lists of older installations are copied once', () => {
   const fresh = E.mergeConfig(null);
-  assert.strictEqual(fresh.holidayCountry, 'NONE');
   assert.strictEqual(fresh.utcOffsetMinutes, 0);
   assert.deepStrictEqual(fresh.holidays, []);
-  assert.strictEqual(E.holidayLookup(fresh)('2026-01-01'), null, 'no built-in holiday by default');
+  assert.strictEqual(E.holidayLookup(fresh)('2026-01-01'), null, 'no holiday unless entered');
+  // An installation from before 1.4.0 that never saved the country setting used Türkiye.
   const legacy = E.mergeConfig({ reasons: {}, tiers: fresh.tiers });
-  assert.strictEqual(legacy.holidayCountry, 'TR');
   assert.strictEqual(legacy.utcOffsetMinutes, 180);
-  const saved = E.mergeConfig({ holidayCountry: 'DE', utcOffsetMinutes: 60 });
-  assert.strictEqual(saved.holidayCountry, 'DE');
-  assert.strictEqual(saved.utcOffsetMinutes, 60);
+  assert.strictEqual(legacy.holidayCountry, 'NONE');
+  ['2021-10-29', '2026-03-20', '2026-10-29'].forEach(d => assert.ok(legacy.holidays.some(h => h.date === d), d));
+  assert.strictEqual(legacy.holidays.find(h => h.date === '2026-10-28').half, true);
+  // Germany: Easter-based dates are copied with their real date for every year.
+  const de = E.mergeConfig({ holidayCountry: 'DE', utcOffsetMinutes: 60, dstRule: 'EU' });
+  const look = E.holidayLookup(de);
+  assert.strictEqual(look('2026-04-03').name, 'Good Friday');
+  assert.strictEqual(look('2027-03-26').name, 'Good Friday');
+  assert.strictEqual(look('2026-03-20'), null, 'no Turkish holidays for Germany');
+  // Own days off are kept and not duplicated.
+  const own = E.mergeConfig({ holidayCountry: 'DE', holidays: [{ date: '2026-12-24', name: 'Christmas Eve', half: true }, { date: '2026-12-25', name: 'Xmas', half: false }] });
+  assert.strictEqual(own.holidays.filter(h => h.date === '2026-12-25').length, 1);
+  assert.ok(own.holidays.some(h => h.date === '2026-12-24' && h.half));
+  // Saved settings are migrated only once.
+  assert.strictEqual(E.mergeConfig(JSON.parse(JSON.stringify(legacy))).holidays.length, legacy.holidays.length);
 });
 
-t('Türkiye: religious holidays of known years are built in and not counted twice', () => {
+t('Türkiye (older installation): religious holidays are copied and not counted twice', () => {
   const tr = E.mergeConfig({ holidayCountry: 'TR', utcOffsetMinutes: 180 });
   const look = E.holidayLookup(tr);
   assert.strictEqual(look('2026-03-20').name, 'Ramadan Feast (day 1)');

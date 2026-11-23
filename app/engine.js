@@ -28,8 +28,8 @@ const DEFAULT_CONFIG = {
   utcOffsetMinutes: 0, // standard (winter) offset, e.g. 60 for Germany, 180 for Türkiye
   dstRule: 'NONE', // 'NONE' or 'EU' (+1 h from the last Sunday of March to the last Sunday of October, 01:00 UTC)
   autoFixedHolidays: true,
-  holidayCountry: 'NONE', // built-in public holidays: 'TR' (Türkiye), 'DE' (Germany, nationwide) or 'NONE'
-  holidays: [], // other days off added by the administrator: { date, name, half }
+  holidayCountry: 'NONE', // legacy (before 1.4.0): 'TR' or 'DE' built-in lists, migrated into `holidays`
+  holidays: [], // public holidays and days off entered by the administrator: { date, name, half }
   tiers: [
     { fromYears: 1, days: 14 },
     { fromYears: 6, days: 21 },
@@ -155,6 +155,7 @@ function mergeConfig(stored) {
   Object.keys(stored).forEach(function (k) {
     if (stored[k] !== undefined && stored[k] !== null) cfg[k] = stored[k];
   });
+  migrateBuiltInHolidays(cfg);
   if (!cfg.ageRule) cfg.ageRule = JSON.parse(JSON.stringify(DEFAULT_CONFIG.ageRule));
   if (!Array.isArray(cfg.tiers) || !cfg.tiers.length) cfg.tiers = JSON.parse(JSON.stringify(DEFAULT_CONFIG.tiers));
   if (!(cfg.workdayHours > 0)) cfg.workdayHours = 8;
@@ -162,6 +163,33 @@ function mergeConfig(stored) {
 }
 
 // ---------- holidays & working time ----------
+
+const MIGRATION_FIRST_YEAR = 2020;
+
+/**
+ * Since 1.4.0 all holidays are entered by the administrator. Installations that used the built-in
+ * Türkiye or Germany lists get those holidays copied into their own list once (2020 to next year),
+ * so past and planned leave is counted exactly as before. Saved with the next settings change or sync.
+ */
+function migrateBuiltInHolidays(cfg, nowMs) {
+  const country = cfg.autoFixedHolidays === false ? 'NONE' : cfg.holidayCountry;
+  if (country !== 'TR' && country !== 'DE') {
+    cfg.holidayCountry = 'NONE';
+    return;
+  }
+  const byDate = {};
+  (cfg.holidays || []).forEach(function (h) { if (h && h.date) byDate[h.date] = h; });
+  const lastYear = new Date(nowMs == null ? Date.now() : nowMs).getUTCFullYear() + 1;
+  for (let y = MIGRATION_FIRST_YEAR; y <= lastYear; y++) {
+    fixedHolidays(y, country).forEach(function (h) {
+      const prev = byDate[h.date];
+      if (!prev || (prev.half && !h.half)) byDate[h.date] = { date: h.date, name: h.name, half: !!h.half };
+    });
+  }
+  cfg.holidays = Object.keys(byDate).sort().map(function (d) { return byDate[d]; });
+  cfg.holidayCountry = 'NONE';
+  cfg.autoFixedHolidays = false;
+}
 
 /** Easter Sunday (Gregorian, anonymous algorithm) as 'YYYY-MM-DD'. */
 function easterSunday(year) {
