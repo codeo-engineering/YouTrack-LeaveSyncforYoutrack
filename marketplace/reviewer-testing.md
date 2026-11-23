@@ -13,7 +13,7 @@ The quickest way to review the app is its **demo mode**, which needs no Microsof
 For every employee you add, the app generates sample Teams Shifts time off relative to today:
 - a vacation week spanning a weekend;
 - three vacation days;
-- leave around New Year's Day;
+- leave around New Year's Day (add 1 January under **Holidays & working time** to see it excluded);
 - a half day and a two-hour sick leave;
 - two sick days;
 - an upcoming vacation;

@@ -96,7 +96,7 @@ All Microsoft requests are **asynchronous**: the endpoint that starts a sync ans
 
 1. Build the package (or take a release zip):
    ```sh
-   cd app && zip -r ../leave-sync-for-youtrack.zip . -x README.md
+   cd app && zip -r ../leave-sync-for-youtrack.zip .
    ```
 2. In YouTrack go to **Administration → Apps → Add app → Upload ZIP file** and select the zip.
 3. Make sure the app is **Active** and its visibility allows all users, so everyone sees the **Leaves** menu item.
@@ -172,8 +172,7 @@ Everything below is in **Administration → Integrations → Leave Management**.
 1. **Leave types** – tick the Teams reasons that are deducted from annual leave (usually *Vacation*/*Off*). Unticked types are counted and shown but not deducted. New reasons appear as *Needs review*.
 2. **Holidays & working time**
    - Add your public holidays and company days off under **Public holidays and days off** (optional, but a leave that spans a holiday only counts correctly if the holiday is listed). Use **Copy … to …** for the next year and check the dates that move.
-   - Add regional, religious or company days off under **Other days off** (full or half day).
-   - Time zone: Germany `UTC+1` with *EU summer time*; Türkiye `UTC+3` with *None*.
+   - Time zone: your company's UTC offset and daylight saving time, for example Germany `UTC+1` with *EU summer time*, Türkiye `UTC+3` with *None*.
    - Hours per working day (default 8) and non-working days (default Sat/Sun).
 
    ![Holidays](docs/images/holidays.png)
@@ -197,7 +196,7 @@ Finally, open **Leaves → View → Team overview** and compare a few balances w
 | Age rule (optional) | Employees aged 18 or younger, or 50 or older, get at least 20 days (needs a birth date) |
 | Carry-over | Unused leave moves into the next leave year on the work anniversary |
 | Counting | Hours-based per local day; a full day equals the working hours per day (default 8) |
-| Weekends & holidays | Never deducted; half-day holidays count as half a day |
+| Weekends & holidays | Weekends and the holidays you enter are never deducted; half-day holidays count as half a day |
 | Hourly / half-day leave | Counted by the hours taken, capped at the day's working hours |
 | Tracking start | Teams leave before *Count Teams leave from* is ignored because it is already included in the carried-in balance. People hired within roughly the last 13 months start at their hire date. |
 | Overrides | Per-year entitlement overrides, manual adjustments and per-leave corrections, each recorded in Change history |
@@ -294,7 +293,7 @@ PRESET=DE node test/preview-server.js
 Build the YouTrack package:
 
 ```sh
-cd app && zip -r ../leave-sync-for-youtrack.zip . -x README.md
+cd app && zip -r ../leave-sync-for-youtrack.zip .
 ```
 
 ---
@@ -307,8 +306,7 @@ Upload the new zip over the existing app in **Administration → Apps**. **Do no
 
 ## Roadmap
 
-Done in 1.3.0: asynchronous Microsoft requests, `minYouTrackVersion` 2026.2, privacy policy.
-Done in 1.4.0: demo mode (try the app without Microsoft 365).
+Done in 1.4.0: asynchronous Microsoft requests, `minYouTrackVersion` 2026.2, privacy policy, demo mode, holidays entered by hand, country-neutral defaults.
 
 Planned:
 - UI follows the YouTrack theme only (no separate theme toggle)
