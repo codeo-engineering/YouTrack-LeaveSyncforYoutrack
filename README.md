@@ -34,7 +34,7 @@ Every employee gets a **Leaves** page in the YouTrack main menu with their own r
 
 **For every employee** (Leaves, main menu)
 - Remaining annual leave in days and hours for the current leave year
-- Entitlement this year, carried-over days, used annual leave and manual adjustments
+- Entitlement this year, carried-over days, annual leave used up to today, upcoming (approved) annual leave and manual adjustments
 - Usage grouped by Teams time-off reason, with a note on whether each type counts against annual leave
 - Full leave history with labels: *upcoming*, *Corrected*, *Updated by manager*, *Before tracking*
 - Period selection: leave years (anniversary to anniversary), calendar years or a custom date range
@@ -307,6 +307,7 @@ Upload the new zip over the existing app in **Administration → Apps**. **Do no
 ## Roadmap
 
 Done in 1.4.0: asynchronous Microsoft requests, `minYouTrackVersion` 2026.2.0, privacy policy, demo mode, holidays entered by hand, country-neutral defaults.
+Done in 1.5.0: separate *Upcoming* column for approved leave after today (Leaves page, employee list, leave years, team overview).
 
 Planned:
 - UI follows the YouTrack theme only (no separate theme toggle)

@@ -96,7 +96,7 @@ function renderEmployees(root) {
     d.employees.length ? h('table', null,
       h('thead', null, h('tr', null,
         h('th', null, 'Name'), h('th', null, 'Hire date'), h('th', { class: 'num' }, 'Service'),
-        h('th', { class: 'num' }, 'Entitlement'), h('th', { class: 'num' }, 'Used'), h('th', { class: 'num' }, 'Remaining'), h('th', null, ''))),
+        h('th', { class: 'num' }, 'Entitlement'), h('th', { class: 'num' }, 'Used'), h('th', { class: 'num', title: 'Approved annual leave that hasn\'t been taken yet' }, 'Upcoming'), h('th', { class: 'num' }, 'Remaining'), h('th', null, ''))),
       h('tbody', null, d.employees.map(e => h('tr', {
         class: 'clickable' + (S.selected === e.login ? ' selected' : ''),
         onclick: async () => { S.selected = e.login; await loadDetail(); render(); }
@@ -106,6 +106,7 @@ function renderEmployees(root) {
         h('td', { class: 'num' }, e.configured ? e.seniorityYears + ' y' : '—'),
         h('td', { class: 'num' }, e.configured ? LT.n(e.entitlement) : '—'),
         h('td', { class: 'num' }, e.configured ? LT.n(e.usedDays) : '—'),
+        h('td', { class: 'num' }, e.configured ? (e.upcomingDays ? LT.n(e.upcomingDays) : h('span', { class: 'muted' }, '–')) : '—'),
         h('td', { class: 'num', style: { fontWeight: 600, color: e.remainingDays < 0 ? 'var(--bad)' : '' } }, e.configured ? LT.n(e.remainingDays) : '—'),
         h('td', null, !e.configured ? h('span', { class: 'badge warn' }, 'No hire date')
           : !e.openingConfirmed ? h('span', { class: 'badge warn', title: 'Check the carried-over balance' }, 'Check balance') : null)
@@ -196,7 +197,7 @@ function renderDetail() {
     h('p', { class: 'small muted' }, 'Entitlement is calculated from years of service on each work anniversary. Type a number to override it for one year; clear it to go back to automatic.'),
     h('table', null,
       h('thead', null, h('tr', null, h('th', null, 'Leave year'), h('th', { class: 'num' }, 'Carried in'), h('th', { class: 'num' }, 'Entitlement'),
-        h('th', { class: 'num' }, 'Adj.'), h('th', { class: 'num' }, 'Used'), h('th', { class: 'num' }, 'Remaining'))),
+        h('th', { class: 'num' }, 'Adj.'), h('th', { class: 'num' }, 'Used'), h('th', { class: 'num', title: 'Approved annual leave that hasn\'t been taken yet' }, 'Upcoming'), h('th', { class: 'num' }, 'Remaining'))),
       h('tbody', null, b.periods.slice().reverse().map(p => {
         const inp = h('input', { type: 'number', step: '0.5', placeholder: String(p.entitlementAuto), value: p.entitlementOverridden ? p.entitlement : '', title: p.entitlementRule, style: { width: '76px' } });
         ovInputs[p.start] = inp;
@@ -206,7 +207,8 @@ function renderDetail() {
           h('td', { class: 'num' }, LT.n(p.carryIn)),
           h('td', { class: 'num' }, inp),
           h('td', { class: 'num' }, LT.signed(p.adjustments)),
-          h('td', { class: 'num' }, LT.n(p.usedDays)),
+          h('td', { class: 'num' }, LT.n(p.takenDays)),
+          h('td', { class: 'num' }, p.upcomingDays ? LT.n(p.upcomingDays) : h('span', { class: 'muted' }, '–')),
           h('td', { class: 'num', style: { fontWeight: 600, color: p.remainingDays < 0 ? 'var(--bad)' : '' } }, LT.n(p.remainingDays)));
       }))),
     h('div', { class: 'row', style: { marginTop: '12px' } },

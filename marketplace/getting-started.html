@@ -158,7 +158,8 @@
   <li><b>Remaining annual leave:</b> days and hours left in the current leave year. Red means the balance is negative (leave taken in advance).</li>
   <li><b>Entitlement this year:</b> days granted on the last work anniversary, based on years of service.</li>
   <li><b>Carried over:</b> unused leave from earlier leave years.</li>
-  <li><b>Used (annual leave):</b> leave of types that are deducted from annual leave.</li>
+  <li><b>Used (annual leave):</b> annual leave taken up to today.</li>
+  <li><b>Upcoming (annual leave):</b> approved annual leave after today. It is already deducted from <i>Remaining</i>, so Remaining shows what can still be requested.</li>
   <li><b>Adjustments:</b> days a manager added or removed by hand, each with a reason.</li>
   <li><b>Usage by type:</b> all leave in the period grouped by Teams reason. Each type shows whether it counts against annual leave.</li>
   <li><b>Leave history:</b> every leave in the period with the time charged. Labels:
@@ -177,7 +178,7 @@
   <li><b>My leave:</b> your own page.</li>
   <li><b>Team overview:</b> one row per employee.
     <ul>
-      <li>Columns: remaining leave now, annual leave used, other leave, and one column per leave type, with team totals. Values are in days.</li>
+      <li>Columns: remaining leave now, annual leave used up to today, upcoming annual leave, other leave, and one column per leave type, with team totals. Values are in days.</li>
       <li>The period can be each person's current leave year, a calendar year or a custom range.</li>
       <li>Click a row to open that person.</li>
     </ul>
@@ -187,7 +188,7 @@
 
 <p><b>Leave Management → Employees</b></p>
 <ul>
-  <li><b>Employee list:</b> hire date, years of service, this year's entitlement, used and remaining days. <i>Check balance</i> marks people whose starting balance hasn't been confirmed yet.</li>
+  <li><b>Employee list:</b> hire date, years of service, this year's entitlement, used, upcoming and remaining days. <i>Check balance</i> marks people whose starting balance hasn't been confirmed yet.</li>
   <li><b>Profile:</b>
     <ul>
       <li><b>Hire date:</b> sets the leave year (anniversary to anniversary) and the years of service.</li>
@@ -197,7 +198,7 @@
   <li><b>Count Teams leave from:</b> Teams leave before this date is ignored, because it is already included in the carried-in balance. People hired within roughly the last 13 months start at the hire date, so leave taken before their first entitlement is deducted from it.</li>
   <li><b>Balance carried into &lt;date&gt;:</b> unused leave from before the tracking start. Use the automatic value or type your own, then tick <b>Checked and confirmed</b>.</li>
   <li><b>Remaining today → Calculate:</b> the quickest way to set the balance. Enter what the person has left today and the carried-in balance is worked out for you.</li>
-  <li><b>Leave years:</b> one row per leave year showing carried in, entitlement, adjustments, used and remaining. Type a number in <b>Entitlement</b> to override one year; leave it empty for the automatic value.</li>
+  <li><b>Leave years:</b> one row per leave year showing carried in, entitlement, adjustments, used (up to today), upcoming (approved, after today) and remaining. Type a number in <b>Entitlement</b> to override one year; leave it empty for the automatic value.</li>
   <li><b>Manual adjustments:</b> add or remove days or hours with a reason, for example leave taken outside Teams or extra days granted. The date decides which leave year it belongs to. The employee sees the reason.</li>
   <li><b>Leave from Teams:</b> every leave imported for the person.
     <ul>

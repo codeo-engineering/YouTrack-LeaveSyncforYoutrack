@@ -239,4 +239,22 @@ t('Türkiye (older installation): religious holidays are copied and not counted 
   assert.strictEqual(E.fixedHolidays(2026, 'DE').some(h => /Feast/.test(h.name)), false);
 });
 
+t('used and upcoming are split at today; remaining deducts both', () => {
+  const cfg = E.mergeConfig({ holidayCountry: 'NONE', utcOffsetMinutes: 180, reasons: { vac: { name: 'Vacation', deducts: true }, sick: { name: 'Sick', deducts: false } } });
+  const profile = { hireDate: '2020-04-04', trackFrom: '2026-04-04', openingDays: 0 };
+  const day = (iso, n) => ({ id: iso + n, start: new Date(Date.parse(iso + 'T00:00:00+03:00')).toISOString(), end: new Date(Date.parse(iso + 'T00:00:00+03:00') + n * 86400000).toISOString(), reasonId: 'vac' });
+  const recs = [day('2026-11-23', 2), day('2026-12-01', 3), Object.assign(day('2026-12-08', 1), { reasonId: 'sick' })];
+  // today = Tue 24 Nov: Mon 23 (taken), Tue 24 (today → taken), 1–3 Dec (upcoming)
+  const b = E.computeBalance(profile, recs, cfg, '2026-11-24');
+  const p = b.current;
+  assert.strictEqual(p.takenDays, 2);
+  assert.strictEqual(p.upcomingDays, 3);
+  assert.strictEqual(p.usedDays, 5);
+  assert.strictEqual(p.remainingDays, p.carryIn + p.entitlement - 5);
+  const sick = p.usageByType.find(u => u.reasonId === 'sick');
+  assert.strictEqual(sick.upcomingDays, 1, 'upcoming per type, deducted or not');
+  const vac = p.usageByType.find(u => u.reasonId === 'vac');
+  assert.strictEqual(vac.upcomingDays, 3);
+});
+
 console.log('\n' + passed + ' passed');

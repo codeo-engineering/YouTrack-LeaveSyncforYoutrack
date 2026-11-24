@@ -518,11 +518,17 @@ function computeBalance(profile, records, cfg, today) {
     const adjList = adjustments.filter(function (a) { return a.date >= ent.start && a.date <= end; });
     const adj = adjList.reduce(function (s, a) { return s + (+a.days || 0); }, 0);
     const byType = {};
-    let usedHours = 0;
+    const upcomingByType = {};
+    let usedHours = 0, upcomingHours = 0;
     allocations.forEach(function (a) {
       if (a.k !== k) return;
+      const upcoming = a.date > today; // approved, not taken yet (today counts as taken)
       byType[a.reasonId] = (byType[a.reasonId] || 0) + a.hours;
-      if (a.deducts) usedHours += a.hours;
+      if (upcoming) upcomingByType[a.reasonId] = (upcomingByType[a.reasonId] || 0) + a.hours;
+      if (a.deducts) {
+        usedHours += a.hours;
+        if (upcoming) upcomingHours += a.hours;
+      }
     });
     const used = usedHours / wh;
     const remaining = carry + ent.days + adj - used;
@@ -540,13 +546,18 @@ function computeBalance(profile, records, cfg, today) {
       entitlementOverridden: ent.overridden,
       adjustments: round2(adj),
       adjustmentList: adjList,
-      usedDays: round2(used),
+      usedDays: round2(used), // taken + upcoming (what the balance deducts)
       usedHours: round2(usedHours),
+      takenDays: round2((usedHours - upcomingHours) / wh), // up to and including today
+      takenHours: round2(usedHours - upcomingHours),
+      upcomingDays: round2(upcomingHours / wh), // approved leave after today
+      upcomingHours: round2(upcomingHours),
       remainingDays: round2(remaining),
       remainingHours: round2(remaining * wh),
       usageByType: Object.keys(byType).map(function (id) {
         const r = (cfg.reasons || {})[id];
-        return { reasonId: id, name: r ? r.name : 'Unknown reason', deducts: !!(r && r.deducts), hours: round2(byType[id]), days: round2(byType[id] / wh) };
+        const up = upcomingByType[id] || 0;
+        return { reasonId: id, name: r ? r.name : 'Unknown reason', deducts: !!(r && r.deducts), hours: round2(byType[id]), days: round2(byType[id] / wh), upcomingHours: round2(up), upcomingDays: round2(up / wh) };
       }).sort(function (a, b) { return b.hours - a.hours; })
     });
     carry = remaining;

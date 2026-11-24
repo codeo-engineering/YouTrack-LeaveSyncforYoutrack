@@ -139,17 +139,21 @@ function render() {
   // ---- totals for the range, from the per-day log ----
   const inRange = (b.dayLog || []).filter(x => x.date >= range.from && x.date <= range.to);
   const byType = {}, byRec = {};
-  let annualH = 0, otherH = 0;
+  let annualH = 0, otherH = 0, annualUpH = 0;
   inRange.forEach(x => {
-    byType[x.reasonId] = byType[x.reasonId] || { hours: 0, deducts: x.deducts };
+    const up = x.date > b.today; // approved, not taken yet
+    byType[x.reasonId] = byType[x.reasonId] || { hours: 0, upHours: 0, deducts: x.deducts };
     byType[x.reasonId].hours += x.hours;
+    if (up) byType[x.reasonId].upHours += x.hours;
     byRec[x.recId] = (byRec[x.recId] || 0) + x.hours;
-    if (x.deducts) annualH += x.hours; else otherH += x.hours;
+    if (x.deducts) { annualH += x.hours; if (up) annualUpH += x.hours; } else otherH += x.hours;
   });
   const wh = b.workdayHours;
   const usage = Object.keys(byType).map(id => ({
-    name: (b.reasonNames || {})[id] || 'Unknown reason', deducts: byType[id].deducts, hours: byType[id].hours, days: byType[id].hours / wh
+    name: (b.reasonNames || {})[id] || 'Unknown reason', deducts: byType[id].deducts, hours: byType[id].hours, days: byType[id].hours / wh,
+    upDays: byType[id].upHours / wh
   })).sort((a, c) => c.hours - a.hours);
+  const anyUpcoming = usage.some(u => u.upDays > 0);
   const includesUpcoming = inRange.some(x => x.date > b.today);
 
   // ---- cards ----
@@ -164,7 +168,8 @@ function render() {
       stat('Entitlement this year', LT.days(p.entitlement), p.entitlementOverridden ? 'Set by your manager' : p.entitlementRule),
       stat('Carried over', LT.days(p.carryIn), p.index !== periods[0].index ? 'Unused from last year'
         : (b.openingConfirmed ? 'Balance when tracking started' : (other ? 'Not confirmed yet – check it in Leave Management' : 'Your manager is still checking this number'))),
-      stat('Used (annual leave)', LT.days(p.usedDays), LT.hours(p.usedHours)),
+      stat('Used (annual leave)', LT.days(p.takenDays), LT.hours(p.takenHours) + ' · up to today'),
+      stat('Upcoming (annual leave)', LT.days(p.upcomingDays), p.upcomingDays ? 'Approved, not taken yet · already deducted from Remaining' : 'No approved leave ahead'),
       p.adjustments ? stat('Adjustments', LT.signedDays(p.adjustments), other ? 'Manual adjustments' : 'Made by your manager') : null
     ));
     if (p.isCurrent && b.nextAnniversary) {
@@ -179,7 +184,8 @@ function render() {
         h('div', { class: 'value' }, LT.days(cur.remainingDays)),
         h('div', { class: 'hint' }, LT.range(cur.start, cur.end))
       ),
-      stat('Annual leave used in this range', LT.days(annualH / wh), LT.hours(annualH)),
+      stat('Annual leave used in this range', LT.days((annualH - annualUpH) / wh), LT.hours(annualH - annualUpH) + ' · up to today'),
+      annualUpH ? stat('Upcoming annual leave in this range', LT.days(annualUpH / wh), 'Approved, not taken yet') : null,
       stat('Other leave in this range', LT.days(otherH / wh), 'Not deducted from annual leave'),
       stat('Total', LT.days((annualH + otherH) / wh), LT.range(range.from, range.to))
     ));
@@ -193,11 +199,14 @@ function render() {
     h('h2', null, 'Usage by type'),
     usage.length
       ? h('table', null,
-          h('thead', null, h('tr', null, h('th', null, 'Type'), h('th', null, 'Counts against annual leave'), h('th', { class: 'num' }, 'Days'), h('th', { class: 'num' }, 'Hours'))),
+          h('thead', null, h('tr', null, h('th', null, 'Type'), h('th', null, 'Counts against annual leave'), h('th', { class: 'num' }, 'Days'),
+            anyUpcoming ? h('th', { class: 'num', title: 'Part of Days that is still ahead' }, 'of which upcoming') : null,
+            h('th', { class: 'num' }, 'Hours'))),
           h('tbody', null, usage.map(u => h('tr', null,
             h('td', null, u.name),
             h('td', null, u.deducts ? h('span', { class: 'badge accent' }, 'Yes') : h('span', { class: 'badge neutral' }, 'No')),
             h('td', { class: 'num' }, LT.n(u.days)),
+            anyUpcoming ? h('td', { class: 'num' }, u.upDays ? LT.n(u.upDays) : h('span', { class: 'muted' }, '–')) : null,
             h('td', { class: 'num' }, LT.n(u.hours))
           ))))
       : h('p', { class: 'muted' }, 'No leave in this period.'));
@@ -280,19 +289,19 @@ function renderTeam() {
   const rows = o.employees.map(e => {
     const range = v.kind === 'current' ? (e.current ? { from: e.current.start, to: e.current.end } : null)
       : v.kind === 'year' ? { from: v.year + '-01-01', to: v.year + '-12-31' } : { from: v.from, to: v.to };
-    const byType = {}; let annual = 0, otherH = 0;
+    const byType = {}; let annual = 0, annualUp = 0, otherH = 0;
     if (range) (e.dayLog || []).forEach(x => {
       if (x.date < range.from || x.date > range.to) return;
       byType[x.reasonId] = (byType[x.reasonId] || 0) + x.hours; typeIds.add(x.reasonId);
-      if (x.deducts) annual += x.hours; else otherH += x.hours;
+      if (x.deducts) { if (x.date > o.today) annualUp += x.hours; else annual += x.hours; } else otherH += x.hours;
     });
-    return { e, range, byType, annual, otherH };
+    return { e, range, byType, annual, annualUp, otherH };
   });
   const types = Array.from(typeIds).sort((a, c) => ((o.reasons[a] || {}).name || '').localeCompare((o.reasons[c] || {}).name || ''));
   const tName = id => (o.reasons[id] || {}).name || 'Unknown';
   const dcell = hrs => h('td', { class: 'num' }, hrs ? LT.n(hrs / wh) : h('span', { class: 'muted' }, '–'));
-  const tot = { annual: 0, other: 0, types: {} };
-  rows.forEach(r => { tot.annual += r.annual; tot.other += r.otherH; types.forEach(t => { tot.types[t] = (tot.types[t] || 0) + (r.byType[t] || 0); }); });
+  const tot = { annual: 0, annualUp: 0, other: 0, types: {} };
+  rows.forEach(r => { tot.annual += r.annual; tot.annualUp += r.annualUp; tot.other += r.otherH; types.forEach(t => { tot.types[t] = (tot.types[t] || 0) + (r.byType[t] || 0); }); });
 
   app.appendChild(h('div', { class: 'card', style: { overflowX: 'auto' } },
     h('table', null,
@@ -300,7 +309,8 @@ function renderTeam() {
         h('th', null, 'Employee'),
         v.kind === 'current' ? h('th', null, 'Leave year') : null,
         h('th', { class: 'num', title: 'Remaining in the current leave year' }, 'Remaining now'),
-        h('th', { class: 'num' }, 'Annual leave used'),
+        h('th', { class: 'num', title: 'Up to today' }, 'Annual leave used'),
+        h('th', { class: 'num', title: 'Approved annual leave after today' }, 'Upcoming annual leave'),
         h('th', { class: 'num' }, 'Other leave'),
         types.map(t => h('th', { class: 'num', title: (o.reasons[t] || {}).deducts ? 'Deducted from annual leave' : 'Not deducted' }, tName(t))))),
       h('tbody', null, rows.map(r => h('tr', { class: 'clickable', title: 'Open ' + r.e.name, onclick: () => switchTarget(r.e.login) },
@@ -308,7 +318,7 @@ function renderTeam() {
         v.kind === 'current' ? h('td', { class: 'small muted' }, r.e.current ? LT.range(r.e.current.start, r.e.current.end) : 'not set up') : null,
         h('td', { class: 'num', style: { fontWeight: 600, color: r.e.current && r.e.current.remainingDays < 0 ? 'var(--bad)' : '' } },
           r.e.current ? LT.n(r.e.current.remainingDays) : '–'),
-        dcell(r.annual), dcell(r.otherH),
+        dcell(r.annual), dcell(r.annualUp), dcell(r.otherH),
         types.map(t => dcell(r.byType[t] || 0))
       )),
         h('tr', null,
@@ -316,11 +326,12 @@ function renderTeam() {
           v.kind === 'current' ? h('td', null) : null,
           h('td', null),
           h('td', { class: 'num' }, h('b', null, LT.n(tot.annual / wh))),
+          h('td', { class: 'num' }, h('b', null, LT.n(tot.annualUp / wh))),
           h('td', { class: 'num' }, h('b', null, LT.n(tot.other / wh))),
           types.map(t => h('td', { class: 'num' }, h('b', null, LT.n(tot.types[t] / wh))))))
     ),
     h('p', { class: 'small muted', style: { marginTop: '10px' } },
-      'All figures in days (' + wh + ' h = 1 day). Weekends and public holidays are not counted; approved upcoming leave inside the period is included. Click a row to open that person\'s page.')
+      'All figures in days (' + wh + ' h = 1 day). Weekends and public holidays are not counted. Used is up to today; Upcoming is approved leave after today, already deducted from Remaining. Other leave and the type columns include upcoming leave. Click a row to open that person\'s page.')
   ));
 }
 

@@ -145,7 +145,8 @@ function employeeSummary(ctx, u, cfg, today) {
     currentEnd: b.current ? b.current.end : null,
     entitlement: b.current ? b.current.entitlement : 0,
     carryIn: b.current ? b.current.carryIn : 0,
-    usedDays: b.current ? b.current.usedDays : 0,
+    usedDays: b.current ? b.current.takenDays : 0,
+    upcomingDays: b.current ? b.current.upcomingDays : 0,
     remainingDays: b.current ? b.current.remainingDays : 0,
     openingIsAuto: b.openingIsAuto,
     openingConfirmed: b.openingConfirmed,
@@ -245,7 +246,7 @@ function adminOverview(ctx) {
     return Object.assign(info, {
       configured: true,
       hireDate: b.hireDate,
-      current: c ? { start: c.start, end: c.end, entitlement: c.entitlement, carryIn: c.carryIn, usedDays: c.usedDays, remainingDays: c.remainingDays } : null,
+      current: c ? { start: c.start, end: c.end, entitlement: c.entitlement, carryIn: c.carryIn, usedDays: c.takenDays, upcomingDays: c.upcomingDays, remainingDays: c.remainingDays } : null,
       dayLog: b.dayLog
     });
   }).sort(function (a, b2) { return String(a.name).localeCompare(String(b2.name)); });
